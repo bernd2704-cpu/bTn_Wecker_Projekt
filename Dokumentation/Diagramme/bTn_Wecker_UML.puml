@@ -1,0 +1,203 @@
+@startuml bTn_Wecker_Architektur
+!theme plain
+skinparam backgroundColor #F8FBFF
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+skinparam ArrowColor #1F4E79
+skinparam ArrowThickness 1.5
+
+skinparam component {
+  BackgroundColor #BDD7EE
+  BorderColor #1F4E79
+  FontColor #1F4E79
+  FontStyle bold
+}
+
+skinparam node {
+  BackgroundColor #1F4E79
+  FontColor white
+  BorderColor #0D3456
+  FontStyle bold
+}
+
+skinparam queue {
+  BackgroundColor #E2EFDA
+  BorderColor #375623
+  FontColor #375623
+}
+
+skinparam database {
+  BackgroundColor #FCE4D6
+  BorderColor #833C00
+  FontColor #833C00
+}
+
+skinparam rectangle {
+  BackgroundColor #EDE7F6
+  BorderColor #4A148C
+  FontColor #4A148C
+}
+
+title bTn Wecker 8v2 – Komponentendiagramm\nESP32 Dual-Core / FreeRTOS
+
+' ── Synchronisationsobjekte ──────────────────────────────────
+queue "inputQueue\n[32 × uint8_t]" as Q
+rectangle "displayMutex" as DM
+rectangle "playerMutex" as PM
+rectangle "nvrSemaphore\n[binär]" as NS
+
+' ── Hardware ─────────────────────────────────────────────────
+database "SSD1306\nOLED I2C" as OLED
+database "DFPlayer Mini\nSerial2" as DFP
+database "NVS Flash\n\"varSafe\"" as NVS
+database "WiFi / NTP" as WIFI
+
+' ── Core 0 ───────────────────────────────────────────────────
+node "Core 0" {
+  [touchTask\nPri 2] as TT
+  [alarmTask\nPri 2] as AT
+  [wifiTask\nPri 1] as WT
+  [nvrTask\nPri 1] as NT
+  [stackMonTask\nPri 1] as SM
+  [watchdogTask\nPri 1] as WD
+}
+
+' ── Core 1 ───────────────────────────────────────────────────
+node "Core 1" {
+  [inputTask\nPri 2] as IT
+  [displayTask\nPri 1] as DT
+}
+
+' ── ISRs ─────────────────────────────────────────────────────
+component "ISR S1\n(IRAM)" as S1
+component "ISR S2\n(IRAM)" as S2
+component "ISR S3\n(IRAM)" as S3
+component "SNTP-Callback\ntimeavailable()" as NTP
+
+' ── Touch → Queue ────────────────────────────────────────────
+TT --> Q : EVT_T0–T4\n(xQueueSend)
+S1  --> Q : EVT_S1\n(FromISR)
+S2  --> Q : EVT_S2\n(FromISR)
+S3  --> Q : EVT_S3\n(FromISR)
+
+' ── inputTask konsumiert Queue ───────────────────────────────
+Q --> IT : xQueueReceive\n(50 ms timeout)
+
+' ── displayMutex ─────────────────────────────────────────────
+IT --> DM : Take (100 ms)
+DT --> DM : Take (100 ms)
+DM --> OLED
+
+' ── playerMutex ──────────────────────────────────────────────
+IT  --> PM : Take (500 ms)
+AT  --> PM : Take (200 ms)
+PM  --> DFP
+
+' ── nvrSemaphore ─────────────────────────────────────────────
+IT  --> NS : Give (safeChange)
+NS  --> NT : Take (EVER)
+NT  --> NVS
+
+' ── alarmTask: Zeit-Snapshot ─────────────────────────────────
+AT --> AT : localtime_r()\nSnapshot
+
+' ── displayTask: Zeit ────────────────────────────────────────
+DT --> DT : showTime()\nunter displayMutex
+
+' ── NTP Callback → Double-Buffer ─────────────────────────────
+NTP --> DT : ntpSyncPending\n(datum_sync_tmp)
+
+' ── wifiTask ─────────────────────────────────────────────────
+WT --> WIFI
+WT --> DT : wifiSyncPending\n(datum_WiFi_tmp)
+
+' ── watchdogTask ─────────────────────────────────────────────
+WD --> IT : wdg_inputTask
+WD --> DT : wdg_displayTask
+WD --> AT : wdg_alarmTask
+
+' ── Ausgänge (GPIO) ──────────────────────────────────────────
+AT --> [E1 GPIO25\nKuckuck] : digitalWrite
+AT --> [E2 GPIO26\nMühlrad] : digitalWrite
+AT --> [E3 GPIO27\nLicht] : digitalWrite
+
+@enduml
+
+' ════════════════════════════════════════════════════════════
+
+@startuml bTn_Wecker_Sequenz
+!theme plain
+skinparam backgroundColor #F8FBFF
+skinparam defaultFontName Arial
+skinparam defaultFontSize 10
+skinparam SequenceArrowThickness 1.5
+skinparam SequenceBoxBackgroundColor #BDD7EE
+skinparam SequenceBoxBorderColor #1F4E79
+skinparam SequenceLifeLineBorderColor #1F4E79
+skinparam SequenceParticipantBackgroundColor #BDD7EE
+skinparam SequenceParticipantBorderColor #1F4E79
+
+title bTn Wecker 8v2 – Sequenzdiagramm: Alarm-Auslösung bei 10:00:00
+
+participant "alarmTask\n(Core 0)" as AT #BDD7EE
+participant "playerMutex" as PM #FCE4D6
+participant "DFPlayer Mini" as DFP #E2EFDA
+participant "inputTask\n(Core 1)" as IT #BDD7EE
+participant "displayTask\n(Core 1)" as DT #BDD7EE
+participant "displayMutex" as DM #FCE4D6
+
+== Jede 500 ms: alarmTask-Zyklus ==
+AT -> AT : localtime_r() → a_sec=0\na_min=0, a_hour=10
+
+AT -> AT : runAlarmMachine(0,0,10)\nBedingung: a1_on, sec==0\nmin==a1_min, hour==a1_hour\nmin≠lastA1Min ✓
+
+AT -> AT : lastA1Min = 0\nalarmState = ALARM_RUNNING
+
+AT -> PM : xSemaphoreTake(200ms)
+PM --> AT : ✓ genommen
+
+AT -> DFP : player.playFolder(1, sound1_assigned)
+DFP --> AT : OK
+
+AT -> PM : xSemaphoreGive
+AT -> AT : t_start6 = millis()\nax_live = true\nwdg_alarmTask = millis()
+
+AT -> AT : runCuckooMachine(0,0,10)\nalarmThisHour=true → unterdrückt ✓
+
+AT -> AT : vTaskDelay(500ms)
+
+== nach ALARM_POLL_MS (5 s): Status prüfen ==
+AT -> PM : xSemaphoreTake(200ms)
+PM --> AT : ✓
+
+AT -> DFP : player.readState()
+DFP --> AT : st (z.B. 1 = spielt noch)
+
+AT -> AT : vTaskDelay(1ms) ← AUSSERHALB Mutex
+
+AT -> PM : xSemaphoreTake(200ms)
+PM --> AT : ✓
+
+AT -> DFP : player.readState() (2. Abfrage)
+DFP --> AT : st = 0 (MP3 beendet)
+
+AT -> PM : xSemaphoreGive
+AT -> AT : playerStatus < 1 →\nE2/E3 LOW, ax_live=false\nalarmState=ALARM_IDLE\nlastA1Min=0xFF
+
+== Nutzer drückt S1 (während Alarm läuft) ==
+IT -> PM : xSemaphoreTake(500ms)
+PM --> IT : ✓
+
+IT -> DFP : player.readState() → st>0
+IT -> DFP : player.stop()
+IT -> PM : xSemaphoreGive
+
+IT -> AT : alarmState=ALARM_IDLE\nlastA1Min=0xFF\nax_live=false
+
+== displayTask: läuft parallel ==
+DT -> DM : xSemaphoreTake(100ms)
+DM --> DT : ✓
+DT -> DT : showTime() → wdg_displayTask=millis()
+DT -> DM : xSemaphoreGive
+
+@enduml

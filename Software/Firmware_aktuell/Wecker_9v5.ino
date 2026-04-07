@@ -1,5 +1,5 @@
 // bTn Wecker mit OLED-Anzeige und MP3-Player
-// Basis: bTn_Alarm_9v4 – FreeRTOS + State Machine + WiFi-Konfigurator
+// Basis: bTn_Alarm_9v5 – FreeRTOS + State Machine + WiFi-Konfigurator
 // Boardverwalter: esp32 3.3.7 von Espressif Systems
 //
 // ─── State Machines ──────────────────────────────────────────
@@ -45,7 +45,7 @@
 //  displayTask Core 1  Pri 1  Zeitanzeige, Auto-Rückkehr
 // ─────────────────────────────────────────────────────────────
 
-const char PGMInfo[] = "bTn_Alarm_9v4";                                                  // PROGMEM-fähig; kein String-Heap-Fragment
+const char PGMInfo[] = "bTn_Alarm_9v5";                                                  // PROGMEM-fähig; kein String-Heap-Fragment
 
 // ── Bibliotheken ─────────────────────────────────────────────
 #include <WiFi.h>
@@ -61,7 +61,7 @@ const char PGMInfo[] = "bTn_Alarm_9v4";                                         
 #include <esp_task_wdt.h>             // ESP32 Hardware Task Watchdog Timer (TWDT)
 
 // ── Konfiguration ────────────────────────────────────────────
-#include "SysConf_9v4.h"           // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
+#include "SysConf_9v5.h"           // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
 #include "WEB.h"
 
 // ── WiFi-Laufzeit-Zugangsdaten (aus NVR, ab 4v0) ─────────────
@@ -1725,7 +1725,7 @@ static void webLogTask(void *pvParam) {
       ".ok{color:#6BCB77}.err{color:#FF6B6B}.warn{color:#FFD93D}"
       ".sec-title{font-size:12px;color:#78909c;margin:16px 0 4px}"
       "</style></head><body>"
-      "<h2>&#x1F553; bTn Wecker 9v4 &ndash; Web-Log</h2>"
+      "<h2>&#x1F553; bTn Wecker 9v5 &ndash; Web-Log</h2>"
       "<h3>IP: " + ip + ":" + String(WEBLOG_PORT) + " &nbsp;|&nbsp; Auto-Refresh: 10 s"
       " &nbsp;|&nbsp; Aktualisiert: <span id='upd'></span></h3>";
 
@@ -2018,11 +2018,11 @@ void setup() {
   // Timeout WDT_HARDWARE_MS kürzer als Software-Watchdog WDG_TIMEOUT_MS:
   // Hardware greift bei echtem CPU-Lock, Software bei logischem Freeze.
   const esp_task_wdt_config_t twdt_cfg = {
-    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_9v4.h
+    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_9v5.h
     .idle_core_mask = 0,               // Idle-Tasks nicht überwachen
     .trigger_panic  = true,            // Backtrace + Reset bei Ablauf
   };
-  esp_task_wdt_init(&twdt_cfg);        // TWDT initialisieren
+  esp_task_wdt_reconfigure(&twdt_cfg); // TWDT umkonfigurieren (Core 3.x init bereits beim Boot)
   webLogf("[TWDT] Hardware Watchdog aktiv (%u ms)", (unsigned)WDT_HARDWARE_MS);
 }
 

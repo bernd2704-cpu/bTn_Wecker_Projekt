@@ -1,10 +1,12 @@
 #pragma once
-// SysConf_9v4.h – Konfigurationskonstanten für bTn Wecker
-// Firmware-Version : 9v4
-// Datei-Version    : 9v4
+// SysConf_9v5.h – Konfigurationskonstanten für bTn Wecker
+// Firmware-Version : 9v5
+// Datei-Version    : 9v5
 // Boardverwalter   : esp32 3.3.7 von Espressif Systems
 //
 // Änderungshistorie:
+//   9v5 – Bugfix: esp_task_wdt_reconfigure() statt esp_task_wdt_init()
+//          verhindert "TWDT already initialized"-Fehler (Arduino Core 3.x)
 //   9v4 – Bugfix: playerStatus == 0 statt < 1 verhindert fälschlichen
 //          Alarm-Abbruch bei UART-Timeout während WebLog-Zugriff
 //   9v3 – Web-Log-Seite: Touch-Baseline und Stack-HWM als dedizierte

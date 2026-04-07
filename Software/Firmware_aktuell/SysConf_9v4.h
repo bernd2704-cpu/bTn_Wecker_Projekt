@@ -1,10 +1,12 @@
 #pragma once
-// SysConf_9v3.h – Konfigurationskonstanten für bTn Wecker
-// Firmware-Version : 9v3
-// Datei-Version    : 9v3
+// SysConf_9v4.h – Konfigurationskonstanten für bTn Wecker
+// Firmware-Version : 9v4
+// Datei-Version    : 9v4
 // Boardverwalter   : esp32 3.3.7 von Espressif Systems
 //
 // Änderungshistorie:
+//   9v4 – Bugfix: playerStatus == 0 statt < 1 verhindert fälschlichen
+//          Alarm-Abbruch bei UART-Timeout während WebLog-Zugriff
 //   9v3 – Web-Log-Seite: Touch-Baseline und Stack-HWM als dedizierte
 //          Snapshot-Sektionen (nur jeweils letzter Wert + Timestamp)
 //   9v2 – WEBLOG_LINES 80 → 40, Web-Log-Seite Auto-Refresh 20 → 10 s

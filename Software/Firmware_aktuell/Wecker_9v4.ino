@@ -230,7 +230,6 @@ static volatile uint32_t wdg_alarmTask   = 0; // gesetzt von alarmTask   (alle 5
 // =============================================================
 
 static SemaphoreHandle_t webLogMutex  = nullptr;          // schützt den Ring-Puffer
-static volatile bool     webLogReady  = false;             // true: webLogTask läuft
 
 // Ring-Puffer
 static char   webLogBuf[WEBLOG_LINES][WEBLOG_LINE_LEN];   // Zeilen-Array
@@ -1375,32 +1374,41 @@ static void inputTask(void *pvParam) {
       uint32_t t_now = millis();
       if (t_now - lastBtnMs[0] >= BTN_LOCKOUT_MS) {
         lastBtnMs[0] = t_now;
+        // Erster readState-Versuch außerhalb Mutex-Dauersperre
+        int16_t st = -1;
         if (xSemaphoreTake(playerMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
-          int16_t st = player.readState();
-          uint32_t rs_start = millis();
-          while (st == -1) {                                                             // Standby-Status auflösen
-            if (millis() - rs_start >= 200) {                                           // Timeout 200 ms → DFPlayer antwortet nicht
-              st = 0;                                                                   // als "idle" behandeln → kein stop(), Kuckuck auslösen
-              break;
-            }
+          st = player.readState();
+          xSemaphoreGive(playerMutex);                                                   // Mutex sofort freigeben
+        }
+        // Standby-Status auflösen: vTaskDelay AUSSERHALB Mutex (Projektregel)
+        uint32_t rs_start = millis();
+        while (st == -1) {
+          if (millis() - rs_start >= 200) {                                             // Timeout 200 ms → DFPlayer antwortet nicht
+            st = 0;                                                                     // als "idle" behandeln → kein stop(), Kuckuck auslösen
+            break;
+          }
+          vTaskDelay(pdMS_TO_TICKS(1));                                                 // außerhalb Mutex – Projektregel eingehalten
+          if (xSemaphoreTake(playerMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
             st = player.readState();
-            vTaskDelay(pdMS_TO_TICKS(1));                                               // ← niemals unter displayMutex
+            xSemaphoreGive(playerMutex);
           }
-          if (st > 0) {
+        }
+        if (st > 0) {
+          if (xSemaphoreTake(playerMutex, pdMS_TO_TICKS(200)) == pdTRUE) {
             player.stop();
-            digitalWrite(E2, LOW);
-            digitalWrite(E3, LOW);
-            ax_live    = false;
-            alarmState = ALARM_IDLE;
-            lastA1Min  = 0xFF;                                                           // Sperren aufheben → Alarm in gleicher Minute neu auslösbar
-            lastA2Min  = 0xFF;
-          } else {
-            digitalWrite(E1, HIGH);
-            t_start4    = millis();
-            cuckooState = CUCKOO_RUNNING;
-            lastCuckooMin = t_min;                                                       // Minuten-Sperre setzen → kein Doppelstart durch Auto-Trigger
+            xSemaphoreGive(playerMutex);
           }
-          xSemaphoreGive(playerMutex);
+          digitalWrite(E2, LOW);
+          digitalWrite(E3, LOW);
+          ax_live    = false;
+          alarmState = ALARM_IDLE;
+          lastA1Min  = 0xFF;                                                             // Sperren aufheben → Alarm in gleicher Minute neu auslösbar
+          lastA2Min  = 0xFF;
+        } else {
+          digitalWrite(E1, HIGH);
+          t_start4    = millis();
+          cuckooState = CUCKOO_RUNNING;
+          lastCuckooMin = t_min;                                                         // Minuten-Sperre setzen → kein Doppelstart durch Auto-Trigger
         }
       }
       if (safeChange) { safeChange = false; xSemaphoreGive(nvrSemaphore); }
@@ -1717,7 +1725,7 @@ static void webLogTask(void *pvParam) {
       ".ok{color:#6BCB77}.err{color:#FF6B6B}.warn{color:#FFD93D}"
       ".sec-title{font-size:12px;color:#78909c;margin:16px 0 4px}"
       "</style></head><body>"
-      "<h2>&#x1F553; bTn Wecker 9v3 &ndash; Web-Log</h2>"
+      "<h2>&#x1F553; bTn Wecker 9v4 &ndash; Web-Log</h2>"
       "<h3>IP: " + ip + ":" + String(WEBLOG_PORT) + " &nbsp;|&nbsp; Auto-Refresh: 10 s"
       " &nbsp;|&nbsp; Aktualisiert: <span id='upd'></span></h3>";
 
@@ -1784,7 +1792,6 @@ static void webLogTask(void *pvParam) {
   });
 
   logServer.begin();
-  webLogReady = true;
   webLogf("[Reset] Anzahl: %lu", (unsigned long)resetCount);
 
   while (true) {
@@ -1834,6 +1841,10 @@ void setup() {
     writeNVR();
   }
   data.end();
+
+  // ── webLogMutex früh initialisieren: setup()-Meldungen puffern ─
+  webLogMutex = xSemaphoreCreateMutex();
+  if (!webLogMutex) rtosPanic("webLogMutex");
 
   // ── Display init (wird auch von runWifiConfigServer genutzt) ─
   display.init();
@@ -1926,12 +1937,11 @@ void setup() {
   pinMode(E3, OUTPUT);
 
   // ── FreeRTOS Objekte ─────────────────────────────────────
-  webLogMutex  = xSemaphoreCreateMutex();               // Ring-Puffer-Schutz für webLog()
+  // webLogMutex wurde bereits früh in setup() erstellt (vor den webLog-Aufrufen)
   inputQueue   = xQueueCreate(32, sizeof(uint8_t));
   displayMutex = xSemaphoreCreateMutex();
   playerMutex  = xSemaphoreCreateMutex();
   nvrSemaphore = xSemaphoreCreateBinary();
-  if (!webLogMutex)  rtosPanic("webLogMutex");
   if (!inputQueue)   rtosPanic("inputQueue");
   if (!displayMutex) rtosPanic("displayMutex");
   if (!playerMutex)  rtosPanic("playerMutex");
@@ -2008,7 +2018,7 @@ void setup() {
   // Timeout WDT_HARDWARE_MS kürzer als Software-Watchdog WDG_TIMEOUT_MS:
   // Hardware greift bei echtem CPU-Lock, Software bei logischem Freeze.
   const esp_task_wdt_config_t twdt_cfg = {
-    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_9v3.h
+    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_9v4.h
     .idle_core_mask = 0,               // Idle-Tasks nicht überwachen
     .trigger_panic  = true,            // Backtrace + Reset bei Ablauf
   };

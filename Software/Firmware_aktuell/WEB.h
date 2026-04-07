@@ -71,7 +71,7 @@ const char WIFI_CONFIG_PAGE[] PROGMEM = R"rawliteral(
     <button type="submit">Speichern &amp; Neu starten</button>
   </form>
 
-  <div class="footer">bTn_Alarm_4v0 &nbsp;&bull;&nbsp; 192.168.4.1</div>
+  <div class="footer">bTn_Alarm_9v4 &nbsp;&bull;&nbsp; 192.168.4.1</div>
 </div>
 
 <script>

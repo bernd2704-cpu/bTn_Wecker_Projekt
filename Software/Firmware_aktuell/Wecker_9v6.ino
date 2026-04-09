@@ -45,7 +45,7 @@
 //  displayTask Core 1  Pri 1  Zeitanzeige, Auto-Rückkehr
 // ─────────────────────────────────────────────────────────────
 
-const char PGMInfo[] = "bTn_Alarm_9v5";                                                  // PROGMEM-fähig; kein String-Heap-Fragment
+const char PGMInfo[] = "bTn_Alarm_9v6";                                                  // PROGMEM-fähig; kein String-Heap-Fragment
 
 // ── Bibliotheken ─────────────────────────────────────────────
 #include <WiFi.h>

@@ -18,6 +18,9 @@
 //          Versionierung eingeführt, WDT_HARDWARE_MS ergänzt,
 //          Stack-Größen als Kommentar dokumentiert
 
+// ── Firmware-Version ─────────────────────────────────────────
+#define FW_VERSION "9v6"                                                       // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
+
 // ── WiFi ─────────────────────────────────────────────────────
 // STA_SSID / STA_PSK werden nicht mehr direkt genutzt.
 // WLAN-Zugangsdaten werden per WebKonfigurator eingerichtet und

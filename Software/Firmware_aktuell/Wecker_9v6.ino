@@ -45,8 +45,6 @@
 //  displayTask Core 1  Pri 1  Zeitanzeige, Auto-Rückkehr
 // ─────────────────────────────────────────────────────────────
 
-const char PGMInfo[] = "bTn_Alarm_9v6";                                                  // PROGMEM-fähig; kein String-Heap-Fragment
-
 // ── Bibliotheken ─────────────────────────────────────────────
 #include <WiFi.h>
 #include <WebServer.h>
@@ -63,6 +61,8 @@ const char PGMInfo[] = "bTn_Alarm_9v6";                                         
 // ── Konfiguration ────────────────────────────────────────────
 #include "SysConf_9v6.h"                                                                 // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
 #include "WEB.h"
+
+const char PGMInfo[] = "bTn_Alarm_" FW_VERSION;                                          // PROGMEM-fähig; kein String-Heap-Fragment
 
 // ── WiFi-Laufzeit-Zugangsdaten (aus NVR, ab 4v0) ─────────────
 // Werden in loadWifiCredentials() gefüllt und danach in
@@ -1725,7 +1725,7 @@ static void webLogTask(void *pvParam) {
       ".ok{color:#6BCB77}.err{color:#FF6B6B}.warn{color:#FFD93D}"
       ".sec-title{font-size:12px;color:#78909c;margin:16px 0 4px}"
       "</style></head><body>"
-      "<h2>&#x1F553; bTn Wecker 9v6 &ndash; Web-Log</h2>"
+      "<h2>&#x1F553; bTn Wecker " FW_VERSION " &ndash; Web-Log</h2>"
       "<h3>IP: " + ip + ":" + String(WEBLOG_PORT) + " &nbsp;|&nbsp; Auto-Refresh: 10 s"
       " &nbsp;|&nbsp; Aktualisiert: <span id='upd'></span></h3>";
 

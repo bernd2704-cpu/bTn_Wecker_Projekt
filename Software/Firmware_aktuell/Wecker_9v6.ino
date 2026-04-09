@@ -178,7 +178,7 @@ char    str_s2_play[4];
 uint8_t vol         = 9;
 uint8_t MAX_VOL     = 20;
 char    str_vol[3];
-int16_t playerStatus = 0;      // nur Core 1: alarmTask schreibt, alarmTask liest – kein volatile nötig
+int16_t playerStatus = 0;      // nur Core 0: alarmTask schreibt, alarmTask liest – kein volatile nötig
 int16_t mp3Count    = 0;
 char    str_mp3[4];
 uint32_t resetCount = 0;
@@ -203,7 +203,7 @@ volatile uint8_t pageselect = 0;
 
 // ── Taster-Debounce ──────────────────────────────────────────
 // Zwei-Stufen-Debouncing:
-//   isrBtnMs[]  – ISR-Ebene:      filtert Hardware-Prellen (BTN_LOCKOUT_MS  =  30 ms)
+//   isrBtnMs[]  – ISR-Ebene:      filtert Hardware-Prellen (BTN_DEBOUNCE_MS =  30 ms)
 //   lastBtnMs[] – Task-Ebene:     Aktionssperre            (BTN_LOCKOUT_MS   = 1000 ms)
 static volatile uint32_t isrBtnMs[3] = {};  // IRAM-zugänglich: von ISR gelesen/geschrieben
 static uint32_t          lastBtnMs[3] = {}; // von inputTask gelesen/geschrieben
@@ -1551,7 +1551,7 @@ static void displayTask(void *pvParam) {
 
 
 // =============================================================
-//  Task 4 – alarmTask  (Core 1, Pri 2)
+//  Task 4 – alarmTask  (Core 0, Pri 2)
 //
 //  Führt Alarm- und Kuckuck-State-Machine aus.
 // =============================================================
@@ -1725,7 +1725,7 @@ static void webLogTask(void *pvParam) {
       ".ok{color:#6BCB77}.err{color:#FF6B6B}.warn{color:#FFD93D}"
       ".sec-title{font-size:12px;color:#78909c;margin:16px 0 4px}"
       "</style></head><body>"
-      "<h2>&#x1F553; bTn Wecker 9v5 &ndash; Web-Log</h2>"
+      "<h2>&#x1F553; bTn Wecker 9v6 &ndash; Web-Log</h2>"
       "<h3>IP: " + ip + ":" + String(WEBLOG_PORT) + " &nbsp;|&nbsp; Auto-Refresh: 10 s"
       " &nbsp;|&nbsp; Aktualisiert: <span id='upd'></span></h3>";
 
@@ -1996,6 +1996,8 @@ void setup() {
       if (c > 0) mp3Count = c - 1;                                                       // c==0 → mp3Count bleibt 0, kein uint8_t-Unterlauf auf 255
     }
   }
+  if (sound1_assigned > mp3Count) sound1_assigned = 1;                                    // NVR-Wert > SD-Inhalt abfangen
+  if (sound2_assigned > mp3Count) sound2_assigned = 1;
   snprintf(str_mp3, sizeof(str_mp3), "%03u", mp3Count);
   snprintf(str_reset, sizeof(str_reset), "%04lu", (unsigned long)resetCount);            // rechtsbündig 4-stellig
   webLogf("[DFPlayer] mp3Count: %d", mp3Count);

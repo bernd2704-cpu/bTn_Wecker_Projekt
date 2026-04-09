@@ -1,5 +1,5 @@
 // bTn Wecker mit OLED-Anzeige und MP3-Player
-// Basis: bTn_Alarm_9v5 – FreeRTOS + State Machine + WiFi-Konfigurator
+// Basis: bTn_Alarm_9v6 – FreeRTOS + State Machine + WiFi-Konfigurator
 // Boardverwalter: esp32 3.3.7 von Espressif Systems
 //
 // ─── State Machines ──────────────────────────────────────────
@@ -61,7 +61,7 @@ const char PGMInfo[] = "bTn_Alarm_9v5";                                         
 #include <esp_task_wdt.h>             // ESP32 Hardware Task Watchdog Timer (TWDT)
 
 // ── Konfiguration ────────────────────────────────────────────
-#include "SysConf_9v5.h"           // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
+#include "SysConf_9v6.h"                                                                 // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
 #include "WEB.h"
 
 // ── WiFi-Laufzeit-Zugangsdaten (aus NVR, ab 4v0) ─────────────
@@ -1497,7 +1497,7 @@ static void inputTask(void *pvParam) {
 //  datum[], zeit[], t_* werden konsistent mit menu() geschrieben.
 //  NTP-Pending-Flag wird unter Mutex in echte Sync-Buffer übertragen.
 //  Auto-Rückkehr zu UI_CLOCK nach AUTO_RETURN_MS (20 s) ohne Touch-Eingabe.
-//  UI_INFO ist ausgenommen – nur S3 verlässt die Info-Seite.
+//  UI_INFO (Seite 7) eingeschlossen – auch von der Info-Seite kehrt Auto-Return zurück.
 // =============================================================
 static void displayTask(void *pvParam) {
   esp_task_wdt_add(NULL);          // Hardware-TWDT: diesen Task anmelden
@@ -1534,9 +1534,9 @@ static void displayTask(void *pvParam) {
         }
       }
 
-      // Auto-Rückkehr: nur wenn nicht UI_CLOCK und nicht UI_INFO,
+      // Auto-Rückkehr: nur wenn nicht UI_CLOCK,
       // und letzter Touch-Event mindestens AUTO_RETURN_MS (20 s) zurückliegt.
-      if (uiState != UI_CLOCK && uiState != UI_INFO &&
+      if (uiState != UI_CLOCK &&
           (millis() - lastTouchMs >= AUTO_RETURN_MS)) {
         uiTransition(UI_CLOCK);  // Auto-Rückkehr: menu() übernimmt display.display()
       }
@@ -2018,7 +2018,7 @@ void setup() {
   // Timeout WDT_HARDWARE_MS kürzer als Software-Watchdog WDG_TIMEOUT_MS:
   // Hardware greift bei echtem CPU-Lock, Software bei logischem Freeze.
   const esp_task_wdt_config_t twdt_cfg = {
-    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_9v5.h
+    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_9v6.h
     .idle_core_mask = 0,               // Idle-Tasks nicht überwachen
     .trigger_panic  = true,            // Backtrace + Reset bei Ablauf
   };

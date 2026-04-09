@@ -1,0 +1,107 @@
+#pragma once
+// SysConf_9v6.h – Konfigurationskonstanten für bTn Wecker
+// Firmware-Version : 9v6
+// Datei-Version    : 9v6
+// Boardverwalter   : esp32 3.3.7 von Espressif Systems
+//
+// Änderungshistorie:
+//   9v6 – Feature: Auto-Rückkehr zu Seite 0 nach 20 s jetzt auch für
+//          Seite 7 (UI_INFO); UI_INFO-Ausnahme aus displayTask entfernt
+//   9v5 – Bugfix: esp_task_wdt_reconfigure() statt esp_task_wdt_init()
+//          verhindert "TWDT already initialized"-Fehler (Arduino Core 3.x)
+//   9v4 – Bugfix: playerStatus == 0 statt < 1 verhindert fälschlichen
+//          Alarm-Abbruch bei UART-Timeout während WebLog-Zugriff
+//   9v3 – Web-Log-Seite: Touch-Baseline und Stack-HWM als dedizierte
+//          Snapshot-Sektionen (nur jeweils letzter Wert + Timestamp)
+//   9v2 – WEBLOG_LINES 80 → 40, Web-Log-Seite Auto-Refresh 20 → 10 s
+//   9v1 – Datei von SystemConfig.h in SysConf_9v1.h umbenannt,
+//          Versionierung eingeführt, WDT_HARDWARE_MS ergänzt,
+//          Stack-Größen als Kommentar dokumentiert
+
+// ── WiFi ─────────────────────────────────────────────────────
+// STA_SSID / STA_PSK werden nicht mehr direkt genutzt.
+// WLAN-Zugangsdaten werden per WebKonfigurator eingerichtet und
+// im NVR-Namespace "wifiCfg" gespeichert (ab Version 4v0).
+#define STA_SSID  "my_ssid"                                                    // nur als Referenz – nicht mehr in WiFi.begin() genutzt
+#define STA_PSK   "my_passwrd"                                                 // nur als Referenz – nicht mehr in WiFi.begin() genutzt
+
+// Access-Point-Konfiguration für den WiFi-Konfigurator
+#define WIFI_AP_SSID    "bTn-Wecker"                                           // SSID des Konfigurations-Access-Points
+#define WIFI_AP_CHANNEL 1                                                      // WiFi-Kanal des Access-Points
+
+// ── NTP ──────────────────────────────────────────────────────
+#define MY_NTP_SERVER "pool.ntp.org"                                           // NTP-Serveradresse
+#define MY_TZ         "CET-1CEST,M3.5.0/02,M10.5.0/03"                         // Zeitzone (POSIX-Format)
+
+// ── DFPlayer Serial-Pins ─────────────────────────────────────
+#define RXD2 16                                                                // ESP32 GPIO16 → DFPlayer TX
+#define TXD2 17                                                                // ESP32 GPIO17 → DFPlayer RX
+
+// ── Touch-Sensor ─────────────────────────────────────────────
+#define TOUCH_DROP      150                                                    // Mindest-Absenkung zur Touch-Erkennung (kalibrieren, ca. 50 % des Differenzwerts)
+#define TOUCH_POLL_MS    50                                                    // Abtastrate des touchTask in ms
+#define TOUCH_HOLD_MS   750                                                    // Haltezeit bis HOLD-Zustand und erster Wiederholungs-Event
+#define TOUCH_REPEAT_MS 250                                                    // Wiederholrate im REPEAT-Zustand
+#define TOUCH_RECAL_MS  600000UL                                               // Baseline-Rekalibrierung Intervall (10 min, nur wenn TS_IDLE)
+
+// ── Eingabe-Event-IDs (inputQueue) ────────────────────────────
+#define EVT_T0  0                                                              // Touch T0 – GPIO4
+#define EVT_T2  1                                                              // Touch T2 – GPIO2
+#define EVT_T3  2                                                              // Touch T3 – GPIO15
+#define EVT_T4  3                                                              // Touch T4 – GPIO13
+#define EVT_S1  4                                                              // Taster S1 – GPIO32
+#define EVT_S2  5                                                              // Taster S2 – GPIO33
+#define EVT_S3  6                                                              // Taster S3 – GPIO0
+
+// ── Setup-Timeouts (ms) ──────────────────────────────────────
+#define SETUP_WIFI_TIMEOUT_MS 30000                                            // max. Wartezeit auf WiFi-Verbindung
+#define SETUP_NTP_TIMEOUT_MS  30000                                            // max. Wartezeit auf erste NTP-Synchronisation
+#define SETUP_MP3_TIMEOUT_MS   5000                                            // max. Wartezeit auf DFPlayer Dateianzahl
+
+// ── Diagnose ─────────────────────────────────────────────────
+#define STACK_MON_INTERVAL_MS 60000UL                                          // Ausgabe-Intervall Stack-Überwachung (60 s)
+#define WDG_TIMEOUT_MS        30000UL                                          // Watchdog: maximale Zeit ohne Lebenszeichen (30 s)
+#define WDG_CHECK_MS           5000UL                                          // Watchdog: Prüfintervall (5 s)
+#define WDT_HARDWARE_MS       15000UL                                          // Hardware-TWDT: Timeout (15 s) – kürzer als WDG_TIMEOUT_MS
+
+// ── Verzögerungskonstanten (ms) ───────────────────────────────
+const uint32_t TOUCH_REPEAT_RATE_MS =  250;                                    // Touch-Wiederholrate
+const uint32_t DISPLAY_UPDATE_MS    =  300;                                    // Zeitanzeige Seite 0
+const uint32_t BTN_DEBOUNCE_MS      =   30;                                    // ISR-Entprellung: filtert Hardware-Prellen (typ. 5–50 ms)
+const uint32_t BTN_LOCKOUT_MS       = 1000;                                    // Aktionssperre in inputTask: verhindert bewusste Doppeldrücke
+const uint32_t CUCKOO_DURATION_MS   = 7500;                                    // Kuckuck-Laufzeit
+const uint32_t AUTO_RETURN_MS       = 20000;                                   // Auto-Rückkehr zu Seite 0
+const uint32_t ALARM_POLL_MS        = 5000;                                    // Alarm-Nachlauf Prüfintervall
+const uint32_t WIFI_RECONNECT_MS    = 3000;                                    // WiFi-Reconnect Wiederholrate
+
+// ── NVR-Zugriffsmodus ────────────────────────────────────────
+const bool ReadWrite = false;                                                  // Preferences: Lesen + Schreiben
+const bool ReadOnly  = true;                                                   // Preferences: nur Lesen
+
+// ── Taster-Pins ──────────────────────────────────────────────
+const uint8_t S1 = 32;                                                         // GPIO32 – Alarm aus / Kuckuck einmalig
+const uint8_t S2 = 33;                                                         // GPIO33 – Zugschalter Licht + Mühlrad
+const uint8_t S3 = 0;                                                          // GPIO0  – Info-Seite ein/aus
+
+// ── Ausgangs-Pins ────────────────────────────────────────────
+const uint8_t E1 = 25;                                                         // GPIO25 – Kuckuck
+const uint8_t E2 = 26;                                                         // GPIO26 – Mühlrad / Motor
+const uint8_t E3 = 27;                                                         // GPIO27 – Licht
+
+// ── Stack-Größen (Bytes) ──────────────────────────────────────
+// Angepasst auf Basis der Stack High-Water Marks aus stackMonTask.
+// setup() verwendet diese Konstanten direkt – Änderungen hier wirken sofort.
+#define STACK_TOUCH     3072                                                   // touchTask
+#define STACK_ALARM     2048                                                   // alarmTask
+#define STACK_WIFI      3072                                                   // wifiTask
+#define STACK_NVR       3072                                                   // nvrTask
+#define STACK_STACKMON  3072                                                   // stackMonTask
+#define STACK_WATCHDOG  2048                                                   // watchdogTask
+#define STACK_INPUT     3072                                                   // inputTask
+#define STACK_DISPLAY   3072                                                   // displayTask
+#define STACK_WEBLOG    4096                                                   // webLogTask (HTTP-Server benötigt mehr Stack)
+
+// ── Web-Logger ────────────────────────────────────────────────
+#define WEBLOG_PORT      8080                                                  // HTTP-Port des Log-Servers (8080 ≠ 80 des WiFi-Konfigurators)
+#define WEBLOG_LINES       40                                                  // Anzahl Zeilen auf der Seite
+#define WEBLOG_LINE_LEN   128                                                  // maximale Zeichenanzahl je Zeile

@@ -1,10 +1,23 @@
 #pragma once
-// SysConf_9v12.h – Konfigurationskonstanten für bTn Wecker
-// Firmware-Version : 9v12
-// Datei-Version    : 9v12
+// SysConf_9v13.h – Konfigurationskonstanten für bTn Wecker
+// Firmware-Version : 9v13
+// Datei-Version    : 9v13
 // Boardverwalter   : esp32 3.3.7 von Espressif Systems
 //
 // Änderungshistorie:
+//   9v13– Mittlere Issues aus Code-Review behoben:
+//          (1) Race auf t_start4/lastCuckooMin zwischen inputTask und
+//              alarmTask dokumentiert – 32-bit-Writes auf Xtensa atomar,
+//              daher logisch harmlos; Kommentar im Code ergänzt
+//          (2) webLogTask "/"-Handler: html.reserve(8192) – verhindert
+//              inkrementelle String-Reallokationen → Heap-Fragmentierung
+//          (3) Mitternachts-Flackern: One-Shot-Flag midnightDrawn –
+//              nur ein einziger Full-Redraw um 00:00:00 statt ~6-7×
+//          (4) sound{1,2}_selected = 0 wenn mp3Count == 0 verhindert:
+//              Fallback auf 1 statt ungültige Dateinummer an DFPlayer
+//          (5) Alarm-Start ohne playerMutex: State nur wechseln wenn
+//              playFolder wirklich lief – kein stiller Alarm bei Mutex-
+//              Timeout, nächster alarmTask-Tick versucht es erneut
 //   9v12– Bugfixes aus Code-Review:
 //          (1) Race Condition auf globaler timeinfo/now behoben –
 //              timeavailable() nutzt lokale tm-Struktur (analog wifiTask)
@@ -38,7 +51,7 @@
 //          Stack-Größen als Kommentar dokumentiert
 
 // ── Firmware-Version ─────────────────────────────────────────
-#define FW_VERSION "9v12"                                                      // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
+#define FW_VERSION "9v13"                                                      // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
 
 // ── WiFi ─────────────────────────────────────────────────────
 // STA_SSID / STA_PSK werden nicht mehr direkt genutzt.

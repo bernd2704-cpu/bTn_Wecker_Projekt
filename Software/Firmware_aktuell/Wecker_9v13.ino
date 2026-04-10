@@ -1,5 +1,5 @@
 // bTn Wecker mit OLED-Anzeige und MP3-Player
-// Basis: bTn_Wecker_9v12 – FreeRTOS + State Machine + WiFi-Konfigurator
+// Basis: bTn_Wecker_9v13 – FreeRTOS + State Machine + WiFi-Konfigurator
 // Boardverwalter: esp32 3.3.7 von Espressif Systems
 //
 // ─── State Machines ──────────────────────────────────────────
@@ -59,7 +59,7 @@
 #include <esp_task_wdt.h>             // ESP32 Hardware Task Watchdog Timer (TWDT)
 
 // ── Konfiguration ────────────────────────────────────────────
-#include "SysConf_9v12.h"                                                                // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
+#include "SysConf_9v13.h"                                                                // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
 #include "WEB.h"
 
 const char PGMInfo[] = "bTn_Wecker_" FW_VERSION;                                          // PROGMEM-fähig; kein String-Heap-Fragment
@@ -936,7 +936,10 @@ static UiState onSound1(uint8_t evt) {
       safeChange = true;
       break;
     case EVT_T4:                                                                         // Sound 1 –
-      if (sound1_selected > 1) { sound1_selected--; } else { sound1_selected = mp3Count; }
+      // 9v13: Fallback auf 1 wenn mp3Count == 0 – vermeidet ungültige
+      // Dateinummer 0 an DFPlayer (kann beim Boot vor readFileCounts auftreten).
+      if (sound1_selected > 1) { sound1_selected--; }
+      else                     { sound1_selected = (mp3Count >= 1) ? mp3Count : 1; }
       snprintf(str_s1, sizeof(str_s1), "%03u", sound1_selected);
       cleanTXT(82, 34, 46, 13);
       zeigeZ16C(105, 32, str_s1);
@@ -971,7 +974,9 @@ static UiState onSound2(uint8_t evt) {
       safeChange = true;
       break;
     case EVT_T4:                                                                         // Sound 2 –
-      if (sound2_selected > 1) { sound2_selected--; } else { sound2_selected = mp3Count; }
+      // 9v13: Fallback auf 1 wenn mp3Count == 0 (analog Sound 1)
+      if (sound2_selected > 1) { sound2_selected--; }
+      else                     { sound2_selected = (mp3Count >= 1) ? mp3Count : 1; }
       snprintf(str_s2, sizeof(str_s2), "%03u", sound2_selected);
       cleanTXT(82, 51, 46, 13);
       zeigeZ16C(105, 49, str_s2);
@@ -1104,31 +1109,36 @@ static void runAlarmMachine(uint8_t sec, uint8_t min, uint8_t hour) {
   switch (alarmState) {
 
     case ALARM_IDLE:
+      // 9v13: lastA*Min und Zustandsübergang nur NACH erfolgreichem
+      // playFolder – vermeidet stille Alarme bei playerMutex-Timeout
+      // (z.B. während langem WebLog-Zugriff). Nächster alarmTask-Tick
+      // (500 ms später) versucht es dann erneut innerhalb derselben
+      // Sekunde 0 → Alarm kommt verzögert aber zuverlässig.
       // Alarm 1 prüfen
       if (a1_on && sec == 0 && min == a1_min && hour == a1_hour
           && min != lastA1Min) {                                                         // nicht dieselbe Minute wiederholen
-        lastA1Min = min;
         if (xSemaphoreTake(playerMutex, pdMS_TO_TICKS(200)) == pdTRUE) {
           player.playFolder(1, sound1_assigned);
           xSemaphoreGive(playerMutex);
+          lastA1Min = min;                                                               // erst nach erfolgreichem Start sperren
+          if (wheel_on) { digitalWrite(E2, HIGH); }
+          if (light_on) { digitalWrite(E3, HIGH); }
+          t_start6   = millis();
+          alarmState = ALARM_RUNNING;                                                    // → ALARM_RUNNING
         }
-        if (wheel_on) { digitalWrite(E2, HIGH); }
-        if (light_on) { digitalWrite(E3, HIGH); }
-        t_start6   = millis();
-        alarmState = ALARM_RUNNING;                                                      // → ALARM_RUNNING
       }
       // Alarm 2 prüfen (else if → Alarm 1 hat Vorrang bei gleicher Zeit)
       else if (a2_on && sec == 0 && min == a2_min && hour == a2_hour
           && min != lastA2Min) {                                                         // nicht dieselbe Minute wiederholen
-        lastA2Min = min;
         if (xSemaphoreTake(playerMutex, pdMS_TO_TICKS(200)) == pdTRUE) {
           player.playFolder(1, sound2_assigned);
           xSemaphoreGive(playerMutex);
+          lastA2Min = min;                                                               // erst nach erfolgreichem Start sperren
+          if (wheel_on) { digitalWrite(E2, HIGH); }
+          if (light_on) { digitalWrite(E3, HIGH); }
+          t_start6   = millis();
+          alarmState = ALARM_RUNNING;                                                    // → ALARM_RUNNING
         }
-        if (wheel_on) { digitalWrite(E2, HIGH); }
-        if (light_on) { digitalWrite(E3, HIGH); }
-        t_start6   = millis();
-        alarmState = ALARM_RUNNING;                                                      // → ALARM_RUNNING
       }
       break;
 
@@ -1406,6 +1416,13 @@ static void inputTask(void *pvParam) {
           lastA1Min  = 0xFF;                                                             // Sperren aufheben → Alarm in gleicher Minute neu auslösbar
           lastA2Min  = 0xFF;
         } else {
+          // 9v13 Hinweis: t_start4 / cuckooState / lastCuckooMin werden
+          // hier (inputTask, Core 1) und in runCuckooMachine (alarmTask,
+          // Core 0) ohne Mutex beschrieben. 32-bit-Writes sind auf
+          // Xtensa atomar (kein Torn Write); die Logik toleriert einen
+          // minimalen Zeitversatz zwischen den Feldern, weil alarmTask
+          // cuckooState als Leitzustand verwendet und t_start4 erst im
+          // Folge-Tick (500 ms) prüft. Daher bewusst ohne Mutex gelassen.
           digitalWrite(E1, HIGH);
           t_start4    = millis();
           cuckooState = CUCKOO_RUNNING;
@@ -1525,13 +1542,25 @@ static void displayTask(void *pvParam) {
       }
 
       if (uiState == UI_CLOCK) {
+        // 9v13: Mitternachts-Redraw als One-Shot – früher wurde menu(0)
+        // ~6-7× innerhalb der 2-Sekunden-Fenster aufgerufen (alle 300 ms)
+        // und verursachte sichtbares Flackern. Jetzt genau ein Full-Redraw
+        // beim Eintritt in 00:00:00, Flag resettet bei Stundenwechsel.
+        static bool midnightDrawn = false;
         if (t_hour == 0 && t_min == 0 && t_sec < 2) {
-          uiTransition(UI_CLOCK); // Mitternacht: menu() zeichnet Seite komplett + ruft display.display() intern
-        } else if (t_sec != t_sec_alt) {
-          t_sec_alt = t_sec;
-          cleanTXT(20, 0, 120, 16);
-          zeigeZ16C(64, 0, zeit);
-          display.display();                                                             // Uhrzeitzeile übertragen
+          if (!midnightDrawn) {
+            midnightDrawn = true;
+            t_sec_alt     = t_sec;                                                       // Sekundenzähler synchron halten
+            uiTransition(UI_CLOCK); // Mitternacht: menu() zeichnet Seite komplett + ruft display.display() intern
+          }
+        } else {
+          midnightDrawn = false;
+          if (t_sec != t_sec_alt) {
+            t_sec_alt = t_sec;
+            cleanTXT(20, 0, 120, 16);
+            zeigeZ16C(64, 0, zeit);
+            display.display();                                                           // Uhrzeitzeile übertragen
+          }
         }
       }
 
@@ -1708,7 +1737,13 @@ static void webLogTask(void *pvParam) {
   // GET / → HTML-Seite
   logServer.on("/", HTTP_GET, [&logServer]() {
     String ip = WiFi.localIP().toString();
-    String html =
+    // 9v13: reserve() verhindert inkrementelle Reallokationen beim
+    // String-Zusammenbau – jede += kann den Puffer verdoppeln und
+    // alten Heap-Block freigeben → Fragmentierung. 8 kB reicht für
+    // CSS + 40 Log-Zeilen + Snapshots ohne Nachallokation.
+    String html;
+    html.reserve(8192);
+    html +=
       "<!DOCTYPE html><html><head><meta charset='UTF-8'>"
       "<meta http-equiv='refresh' content='20'>"
       "<title>bTn Wecker Log</title>"
@@ -2037,7 +2072,7 @@ void setup() {
   // Timeout WDT_HARDWARE_MS kürzer als Software-Watchdog WDG_TIMEOUT_MS:
   // Hardware greift bei echtem CPU-Lock, Software bei logischem Freeze.
   const esp_task_wdt_config_t twdt_cfg = {
-    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_9v12.h
+    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_9v13.h
     .idle_core_mask = 0,               // Idle-Tasks nicht überwachen
     .trigger_panic  = true,            // Backtrace + Reset bei Ablauf
   };

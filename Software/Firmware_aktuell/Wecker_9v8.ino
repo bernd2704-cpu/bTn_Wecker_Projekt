@@ -1,5 +1,5 @@
 // bTn Wecker mit OLED-Anzeige und MP3-Player
-// Basis: bTn_Alarm_9v8 – FreeRTOS + State Machine + WiFi-Konfigurator
+// Basis: bTn_Wecker_9v8 – FreeRTOS + State Machine + WiFi-Konfigurator
 // Boardverwalter: esp32 3.3.7 von Espressif Systems
 //
 // ─── State Machines ──────────────────────────────────────────
@@ -62,7 +62,7 @@
 #include "SysConf_9v8.h"                                                                 // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
 #include "WEB.h"
 
-const char PGMInfo[] = "bTn_Alarm_" FW_VERSION;                                          // PROGMEM-fähig; kein String-Heap-Fragment
+const char PGMInfo[] = "bTn_Wecker_" FW_VERSION;                                          // PROGMEM-fähig; kein String-Heap-Fragment
 
 // ── WiFi-Laufzeit-Zugangsdaten (aus NVR, ab 4v0) ─────────────
 // Werden in loadWifiCredentials() gefüllt und danach in

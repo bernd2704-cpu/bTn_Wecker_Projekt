@@ -1,5 +1,5 @@
 // bTn Wecker mit OLED-Anzeige und MP3-Player
-// Basis: bTn_Wecker_9v10 – FreeRTOS + State Machine + WiFi-Konfigurator
+// Basis: bTn_Wecker_9v11 – FreeRTOS + State Machine + WiFi-Konfigurator
 // Boardverwalter: esp32 3.3.7 von Espressif Systems
 //
 // ─── State Machines ──────────────────────────────────────────
@@ -59,7 +59,7 @@
 #include <esp_task_wdt.h>             // ESP32 Hardware Task Watchdog Timer (TWDT)
 
 // ── Konfiguration ────────────────────────────────────────────
-#include "SysConf_9v10.h"                                                                // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
+#include "SysConf_9v11.h"                                                                // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
 #include "WEB.h"
 
 const char PGMInfo[] = "bTn_Wecker_" FW_VERSION;                                          // PROGMEM-fähig; kein String-Heap-Fragment
@@ -176,7 +176,7 @@ char    str_s2[4];
 uint8_t sound2_assigned = 1;
 char    str_s2_play[4];
 uint8_t vol         = 9;
-uint8_t MAX_VOL     = 20;
+uint8_t MAX_VOL     = 25;
 char    str_vol[3];
 int16_t playerStatus = 0;      // nur Core 0: alarmTask schreibt, alarmTask liest – kein volatile nötig
 int16_t mp3Count    = 0;

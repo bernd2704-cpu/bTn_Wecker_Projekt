@@ -1,10 +1,12 @@
 #pragma once
-// SysConf_9v10.h – Konfigurationskonstanten für bTn Wecker
-// Firmware-Version : 9v10
-// Datei-Version    : 9v10
+// SysConf_9v11.h – Konfigurationskonstanten für bTn Wecker
+// Firmware-Version : 9v11
+// Datei-Version    : 9v11
 // Boardverwalter   : esp32 3.3.7 von Espressif Systems
 //
 // Änderungshistorie:
+//   9v11– Stack-Vorgaben reduziert: wifiTask/nvrTask/inputTask/displayTask
+//          2560, watchdogTask 1536 (basierend auf High-Water-Mark-Messung)
 //   9v10– DFPlayer Start-Sound: readFileCounts() vor playFolder verschoben –
 //          Sound wird erst abgespielt wenn SD-Index aufgebaut ist; behebt
 //          Abbruch des Start-Sounds nach Power-On/Flash
@@ -29,7 +31,7 @@
 //          Stack-Größen als Kommentar dokumentiert
 
 // ── Firmware-Version ─────────────────────────────────────────
-#define FW_VERSION "9v10"                                                      // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
+#define FW_VERSION "9v11"                                                      // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
 
 // ── WiFi ─────────────────────────────────────────────────────
 // STA_SSID / STA_PSK werden nicht mehr direkt genutzt.
@@ -106,12 +108,12 @@ const uint8_t E3 = 27;                                                         /
 // setup() verwendet diese Konstanten direkt – Änderungen hier wirken sofort.
 #define STACK_TOUCH     3072                                                   // touchTask
 #define STACK_ALARM     2048                                                   // alarmTask
-#define STACK_WIFI      3072                                                   // wifiTask
-#define STACK_NVR       3072                                                   // nvrTask
+#define STACK_WIFI      2560                                                   // wifiTask
+#define STACK_NVR       2560                                                   // nvrTask
 #define STACK_STACKMON  3072                                                   // stackMonTask
-#define STACK_WATCHDOG  2048                                                   // watchdogTask
-#define STACK_INPUT     3072                                                   // inputTask
-#define STACK_DISPLAY   3072                                                   // displayTask
+#define STACK_WATCHDOG  1536                                                   // watchdogTask
+#define STACK_INPUT     2560                                                   // inputTask
+#define STACK_DISPLAY   2560                                                   // displayTask
 #define STACK_WEBLOG    4096                                                   // webLogTask (HTTP-Server benötigt mehr Stack)
 
 // ── Web-Logger ────────────────────────────────────────────────

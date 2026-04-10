@@ -1,10 +1,17 @@
 #pragma once
-// SysConf_9v6.h – Konfigurationskonstanten für bTn Wecker
-// Firmware-Version : 9v6
-// Datei-Version    : 9v6
+// SysConf_9v9.h – Konfigurationskonstanten für bTn Wecker
+// Firmware-Version : 9v9
+// Datei-Version    : 9v9
 // Boardverwalter   : esp32 3.3.7 von Espressif Systems
 //
 // Änderungshistorie:
+//   9v9 – Web-Log: Schriftgröße der Überschriften (h2, h3, .sec-title,
+//          .snap-title) auf 1rem / 1.6rem vergrößert
+//   9v8 – Web-Log Auto-Refresh 10 → 20 s; Reihenfolge: Allg. Log,
+//          Touch Baseline, Stack HWM; Allg. Log-Titel zeigt NTP-Sync-
+//          Zeitstempel des ersten Resets
+//   9v7 – Bugfix: EVT_S3 aktualisiert nun lastTouchMs – Auto-Rückkehr von
+//          UI_INFO startete sofort statt nach 20 s (S3 hat EVT-ID 6 > EVT_T4=3)
 //   9v6 – Feature: Auto-Rückkehr zu Seite 0 nach 20 s jetzt auch für
 //          Seite 7 (UI_INFO); UI_INFO-Ausnahme aus displayTask entfernt
 //   9v5 – Bugfix: esp_task_wdt_reconfigure() statt esp_task_wdt_init()
@@ -19,7 +26,7 @@
 //          Stack-Größen als Kommentar dokumentiert
 
 // ── Firmware-Version ─────────────────────────────────────────
-#define FW_VERSION "9v6"                                                       // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
+#define FW_VERSION "9v9"                                                       // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
 
 // ── WiFi ─────────────────────────────────────────────────────
 // STA_SSID / STA_PSK werden nicht mehr direkt genutzt.

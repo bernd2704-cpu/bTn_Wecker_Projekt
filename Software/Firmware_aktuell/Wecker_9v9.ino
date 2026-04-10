@@ -1,5 +1,5 @@
 // bTn Wecker mit OLED-Anzeige und MP3-Player
-// Basis: bTn_Alarm_9v6 – FreeRTOS + State Machine + WiFi-Konfigurator
+// Basis: bTn_Wecker_9v9 – FreeRTOS + State Machine + WiFi-Konfigurator
 // Boardverwalter: esp32 3.3.7 von Espressif Systems
 //
 // ─── State Machines ──────────────────────────────────────────
@@ -59,10 +59,10 @@
 #include <esp_task_wdt.h>             // ESP32 Hardware Task Watchdog Timer (TWDT)
 
 // ── Konfiguration ────────────────────────────────────────────
-#include "SysConf_9v6.h"                                                                 // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
+#include "SysConf_9v9.h"                                                                 // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
 #include "WEB.h"
 
-const char PGMInfo[] = "bTn_Alarm_" FW_VERSION;                                          // PROGMEM-fähig; kein String-Heap-Fragment
+const char PGMInfo[] = "bTn_Wecker_" FW_VERSION;                                          // PROGMEM-fähig; kein String-Heap-Fragment
 
 // ── WiFi-Laufzeit-Zugangsdaten (aus NVR, ab 4v0) ─────────────
 // Werden in loadWifiCredentials() gefüllt und danach in
@@ -224,7 +224,7 @@ static volatile uint32_t wdg_alarmTask   = 0; // gesetzt von alarmTask   (alle 5
 //  webLog(msg) ersetzt Serial.*-Ausgaben nach WiFi-Connect.
 //  Schreibt in einen Ring-Puffer (WEBLOG_LINES Einträge).
 //  webLogTask startet einen HTTP-Server auf Port WEBLOG_PORT.
-//  Browser ruft / auf → HTML-Seite mit Auto-Refresh alle 10 s.
+//  Browser ruft / auf → HTML-Seite mit Auto-Refresh alle 20 s.
 //  /log liefert den aktuellen Pufferinhalt als plain text.
 //  webLogReady-Flag: webLog() puffert erst wenn Task gestartet.
 // =============================================================
@@ -244,6 +244,7 @@ static char snapTouchBuf[SNAP_BUF_LEN] = "(noch keine Daten)";
 static char snapTouchTime[20]          = "";
 static char snapStackBuf[SNAP_BUF_LEN] = "(noch keine Daten)";
 static char snapStackTime[20]          = "";
+static char snapNtpTime[20]            = "";
 
 // Schreibt eine Nachricht in den Ring-Puffer (thread-safe).
 // Bleibt still wenn Mutex noch nicht initialisiert.
@@ -1435,8 +1436,8 @@ static void inputTask(void *pvParam) {
     }
 
     // ── alle anderen Events: displayMutex holen ───────────────────
-    // Touch-Events (T0–T4) aktualisieren den Auto-Rückkehr-Timer.
-    if (evt <= EVT_T4) {
+    // Touch-Events (T0–T4) und S3 (Info-Seite) aktualisieren den Auto-Rückkehr-Timer.
+    if (evt <= EVT_T4 || evt == EVT_S3) {
       lastTouchMs = millis();
     }
 
@@ -1709,51 +1710,33 @@ static void webLogTask(void *pvParam) {
     String ip = WiFi.localIP().toString();
     String html =
       "<!DOCTYPE html><html><head><meta charset='UTF-8'>"
-      "<meta http-equiv='refresh' content='10'>"
+      "<meta http-equiv='refresh' content='20'>"
       "<title>bTn Wecker Log</title>"
       "<style>"
       "body{font-family:monospace;background:#1a1a2e;color:#e0e0e0;margin:0;padding:16px}"
-      "h2{color:#BDD7EE;margin-bottom:8px}"
-      "h3{color:#888;font-weight:normal;font-size:13px;margin:0 0 12px}"
+      "h2{color:#BDD7EE;margin-bottom:8px;font-size:1.6rem}"
+      "h3{color:#888;font-weight:normal;font-size:1rem;margin:0 0 12px}"
       ".snap-wrap{margin-bottom:16px}"
-      ".snap-title{font-size:12px;color:#78909c;margin-bottom:4px}"
+      ".snap-title{font-size:1rem;color:#78909c;margin-bottom:4px}"
       ".snap-title .ts{color:#4A9EFF;font-weight:bold}"
       ".snap-box{background:#0d1a0d;border:1px solid #2a4a2a;border-radius:6px;padding:10px;"
-      "white-space:pre;font-size:13px;color:#b0d0b0}"
+      "white-space:pre;overflow-x:auto;font-size:19px;color:#b0d0b0}"
       "#log{background:#0d0d1a;border:1px solid #333;border-radius:6px;padding:12px;"
-      "white-space:pre-wrap;word-break:break-all;max-height:60vh;overflow-y:auto;font-size:13px}"
+      "white-space:pre;overflow-x:auto;max-height:60vh;overflow-y:auto;font-size:19px}"
       ".ok{color:#6BCB77}.err{color:#FF6B6B}.warn{color:#FFD93D}"
-      ".sec-title{font-size:12px;color:#78909c;margin:16px 0 4px}"
+      ".sec-title{font-size:1rem;color:#78909c;margin:16px 0 4px}"
       "</style></head><body>"
       "<h2>&#x1F553; bTn Wecker " FW_VERSION " &ndash; Web-Log</h2>"
-      "<h3>IP: " + ip + ":" + String(WEBLOG_PORT) + " &nbsp;|&nbsp; Auto-Refresh: 10 s"
+      "<h3>IP: " + ip + ":" + String(WEBLOG_PORT) + " &nbsp;|&nbsp; Auto-Refresh: 20 s"
       " &nbsp;|&nbsp; Aktualisiert: <span id='upd'></span></h3>";
 
-    // ── Snapshot: Touch Baseline ─────────────────────────────
-    if (webLogMutex && xSemaphoreTake(webLogMutex, pdMS_TO_TICKS(200)) == pdTRUE) {
-      String touchTime = String(snapTouchTime);
-      String touchContent = String(snapTouchBuf);
-      String stackTime = String(snapStackTime);
-      String stackContent = String(snapStackBuf);
-      xSemaphoreGive(webLogMutex);
-
-      touchContent.replace("<", "&lt;"); touchContent.replace(">", "&gt;");
-      stackContent.replace("<", "&lt;"); stackContent.replace(">", "&gt;");
-
-      html += "<div class='snap-wrap'>"
-              "<div class='snap-title'>Touch Baseline – letzte Kalibrierung: "
-              "<span class='ts'>" + touchTime + "</span></div>"
-              "<div class='snap-box'>" + touchContent + "</div></div>";
-
-      html += "<div class='snap-wrap'>"
-              "<div class='snap-title'>Stack High-Water Marks – letzte Messung: "
-              "<span class='ts'>" + stackTime + "</span></div>"
-              "<div class='snap-box'>" + stackContent + "</div></div>";
-    }
-
     // ── Ring-Puffer ──────────────────────────────────────────
-    html += "<div class='sec-title'>Allgemeines Log</div>"
-            "<div id='log'>";
+    {
+      String ntpTs = strlen(snapNtpTime) > 0 ? String(snapNtpTime) : String("–");
+      html += "<div class='sec-title'>Allgemeines Log &ndash; letzter Reset: "
+              "<span style='color:#4A9EFF'>" + ntpTs + "</span></div>";
+    }
+    html += "<div id='log'>";
     if (webLogMutex && xSemaphoreTake(webLogMutex, pdMS_TO_TICKS(200)) == pdTRUE) {
       uint16_t start = (webLogCount < WEBLOG_LINES)
                      ? 0
@@ -1774,7 +1757,30 @@ static void webLogTask(void *pvParam) {
       }
       xSemaphoreGive(webLogMutex);
     }
-    html += "</div><script>document.getElementById('upd').textContent=new Date().toLocaleTimeString();</script></body></html>";
+    html += "</div>";
+
+    // ── Snapshot: Touch Baseline + Stack HWM ─────────────────
+    if (webLogMutex && xSemaphoreTake(webLogMutex, pdMS_TO_TICKS(200)) == pdTRUE) {
+      String touchTime = String(snapTouchTime);
+      String touchContent = String(snapTouchBuf);
+      String stackTime = String(snapStackTime);
+      String stackContent = String(snapStackBuf);
+      xSemaphoreGive(webLogMutex);
+
+      touchContent.replace("<", "&lt;"); touchContent.replace(">", "&gt;");
+      stackContent.replace("<", "&lt;"); stackContent.replace(">", "&gt;");
+
+      html += "<div class='snap-wrap'>"
+              "<div class='snap-title'>Touch Baseline – letzte Kalibrierung: "
+              "<span class='ts'>" + touchTime + "</span></div>"
+              "<div class='snap-box'>" + touchContent + "</div></div>";
+
+      html += "<div class='snap-wrap'>"
+              "<div class='snap-title'>Stack High-Water Marks – letzte Messung: "
+              "<span class='ts'>" + stackTime + "</span></div>"
+              "<div class='snap-box'>" + stackContent + "</div></div>";
+    }
+    html += "<script>document.getElementById('upd').textContent=new Date().toLocaleTimeString();</script></body></html>";
     logServer.send(200, "text/html; charset=UTF-8", html);
   });
 
@@ -1926,6 +1932,7 @@ void setup() {
       }
     }
     webLog("[NTP] Synchronisation OK");
+    snapTimeStr(snapNtpTime, sizeof(snapNtpTime));
   }
 
   // ── GPIO ─────────────────────────────────────────────────

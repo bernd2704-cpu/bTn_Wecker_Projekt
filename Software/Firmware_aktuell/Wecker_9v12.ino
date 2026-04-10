@@ -1,5 +1,5 @@
 // bTn Wecker mit OLED-Anzeige und MP3-Player
-// Basis: bTn_Wecker_9v11 – FreeRTOS + State Machine + WiFi-Konfigurator
+// Basis: bTn_Wecker_9v12 – FreeRTOS + State Machine + WiFi-Konfigurator
 // Boardverwalter: esp32 3.3.7 von Espressif Systems
 //
 // ─── State Machines ──────────────────────────────────────────
@@ -59,7 +59,7 @@
 #include <esp_task_wdt.h>             // ESP32 Hardware Task Watchdog Timer (TWDT)
 
 // ── Konfiguration ────────────────────────────────────────────
-#include "SysConf_9v11.h"                                                                // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
+#include "SysConf_9v12.h"                                                                // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
 #include "WEB.h"
 
 const char PGMInfo[] = "bTn_Wecker_" FW_VERSION;                                          // PROGMEM-fähig; kein String-Heap-Fragment
@@ -157,7 +157,6 @@ bool    a2_on   = true;
 uint8_t a2_hour = 6;
 uint8_t a2_min  = 0;
 char    str_a2[6];
-volatile bool    ax_live = false;
 
 volatile uint32_t t_start4 = 0;
          uint32_t lastTouchMs = 0;                                                       // Zeitstempel letzter Touch-Event (EVT_T0–T4)
@@ -356,11 +355,16 @@ void showTime() {
 // NTP-Synchronisations-Callback (wird vom SNTP-Task aufgerufen, nicht vom
 // Haupt-Task). Schreibt nur in thread-lokale tmp-Puffer und setzt ein Flag.
 // displayTask überträgt die Daten sicher unter displayMutex.
+// 9v12: lokale tm-Struktur verwenden (statt globaler timeinfo) – vermeidet
+// Race Condition mit showTime() im displayTask, das dieselben globalen
+// Variablen ohne Sync-Bezug zum SNTP-Task beschreibt.
 void timeavailable(struct timeval *t) {
-  time(&now);
-  localtime_r(&now, &timeinfo);
-  snprintf(datum_sync_tmp, sizeof(datum_sync_tmp), "%04u%02u%02u", timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday);
-  snprintf(zeit_sync_tmp,  sizeof(zeit_sync_tmp),  "%02u:%02u:%02u", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+  time_t    now_local;
+  struct tm tm_local;
+  time(&now_local);
+  localtime_r(&now_local, &tm_local);
+  snprintf(datum_sync_tmp, sizeof(datum_sync_tmp), "%04u%02u%02u", tm_local.tm_year + 1900, tm_local.tm_mon + 1, tm_local.tm_mday);
+  snprintf(zeit_sync_tmp,  sizeof(zeit_sync_tmp),  "%02u:%02u:%02u", tm_local.tm_hour, tm_local.tm_min, tm_local.tm_sec);
   ntpSyncPending = true;                                                                   // displayTask überträgt unter Mutex
 }
 
@@ -1111,7 +1115,6 @@ static void runAlarmMachine(uint8_t sec, uint8_t min, uint8_t hour) {
         if (wheel_on) { digitalWrite(E2, HIGH); }
         if (light_on) { digitalWrite(E3, HIGH); }
         t_start6   = millis();
-        ax_live    = true;
         alarmState = ALARM_RUNNING;                                                      // → ALARM_RUNNING
       }
       // Alarm 2 prüfen (else if → Alarm 1 hat Vorrang bei gleicher Zeit)
@@ -1125,7 +1128,6 @@ static void runAlarmMachine(uint8_t sec, uint8_t min, uint8_t hour) {
         if (wheel_on) { digitalWrite(E2, HIGH); }
         if (light_on) { digitalWrite(E3, HIGH); }
         t_start6   = millis();
-        ax_live    = true;
         alarmState = ALARM_RUNNING;                                                      // → ALARM_RUNNING
       }
       break;
@@ -1147,7 +1149,6 @@ static void runAlarmMachine(uint8_t sec, uint8_t min, uint8_t hour) {
         if (playerStatus == 0) {                                                         // MP3 beendet (0=stopped; -1=UART-Timeout → Alarm läuft weiter)
           if (wheel_on) { digitalWrite(E2, LOW); }
           if (light_on) { digitalWrite(E3, LOW); }
-          ax_live    = false;
           lastA1Min  = 0xFF;                                                             // Sperre aufheben → nächster Alarm möglich
           lastA2Min  = 0xFF;
           alarmState = ALARM_IDLE;                                                       // → ALARM_IDLE
@@ -1401,7 +1402,6 @@ static void inputTask(void *pvParam) {
           }
           digitalWrite(E2, LOW);
           digitalWrite(E3, LOW);
-          ax_live    = false;
           alarmState = ALARM_IDLE;
           lastA1Min  = 0xFF;                                                             // Sperren aufheben → Alarm in gleicher Minute neu auslösbar
           lastA2Min  = 0xFF;
@@ -1996,9 +1996,18 @@ void setup() {
   webLogf("[DFPlayer] mp3Count: %d", mp3Count);
 
   // ── Startseite ───────────────────────────────────────────
-  snprintf(datum_WiFi,  sizeof(datum_WiFi), "%04u%02u%02u", timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday);
-  snprintf(zeit_WiFi,   sizeof(zeit_WiFi),  "%02u:%02u:%02u", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+  // 9v12: showTime() vor snprintf, damit timeinfo sicher gültig ist
+  // (ohne WiFi/NTP wurde sie in der NTP-Warteschleife nie aufgerufen
+  // und hätte "19000101" produziert). Fallback bei fehlendem NTP-Sync
+  // schreibt Platzhalterstrings statt uninitialisierter Werte.
   showTime();
+  if (wifiConnected && timeinfo.tm_year >= 71) {
+    snprintf(datum_WiFi,  sizeof(datum_WiFi), "%04u%02u%02u", timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday);
+    snprintf(zeit_WiFi,   sizeof(zeit_WiFi),  "%02u:%02u:%02u", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+  } else {
+    snprintf(datum_WiFi,  sizeof(datum_WiFi), "--------");
+    snprintf(zeit_WiFi,   sizeof(zeit_WiFi),  "--:--:--");
+  }
   snprintf(str_a1,      sizeof(str_a1),      "%02u:%02u", a1_hour, a1_min);
   snprintf(str_a2,      sizeof(str_a2),      "%02u:%02u", a2_hour, a2_min);
   snprintf(str_s1,      sizeof(str_s1),      "%03u",      sound1_selected);
@@ -2028,7 +2037,7 @@ void setup() {
   // Timeout WDT_HARDWARE_MS kürzer als Software-Watchdog WDG_TIMEOUT_MS:
   // Hardware greift bei echtem CPU-Lock, Software bei logischem Freeze.
   const esp_task_wdt_config_t twdt_cfg = {
-    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_9v6.h
+    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_9v12.h
     .idle_core_mask = 0,               // Idle-Tasks nicht überwachen
     .trigger_panic  = true,            // Backtrace + Reset bei Ablauf
   };

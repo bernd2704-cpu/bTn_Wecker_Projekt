@@ -1,10 +1,17 @@
 #pragma once
-// SysConf_9v11.h – Konfigurationskonstanten für bTn Wecker
-// Firmware-Version : 9v11
-// Datei-Version    : 9v11
+// SysConf_9v12.h – Konfigurationskonstanten für bTn Wecker
+// Firmware-Version : 9v12
+// Datei-Version    : 9v12
 // Boardverwalter   : esp32 3.3.7 von Espressif Systems
 //
 // Änderungshistorie:
+//   9v12– Bugfixes aus Code-Review:
+//          (1) Race Condition auf globaler timeinfo/now behoben –
+//              timeavailable() nutzt lokale tm-Struktur (analog wifiTask)
+//          (2) datum_WiFi/zeit_WiFi ohne NTP-Sync: showTime() vor snprintf
+//              und nur füllen wenn wifiConnected – verhindert "19000101"
+//          (3) Dead Code ax_live entfernt (nie gelesen)
+//          (4) Kommentar-Referenz SysConf_9v6.h → SysConf_9v12.h korrigiert
 //   9v11– Stack-Vorgaben reduziert: wifiTask/nvrTask/inputTask/displayTask
 //          2560, watchdogTask 1536 (basierend auf High-Water-Mark-Messung)
 //   9v10– DFPlayer Start-Sound: readFileCounts() vor playFolder verschoben –
@@ -31,7 +38,7 @@
 //          Stack-Größen als Kommentar dokumentiert
 
 // ── Firmware-Version ─────────────────────────────────────────
-#define FW_VERSION "9v11"                                                      // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
+#define FW_VERSION "9v12"                                                      // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
 
 // ── WiFi ─────────────────────────────────────────────────────
 // STA_SSID / STA_PSK werden nicht mehr direkt genutzt.

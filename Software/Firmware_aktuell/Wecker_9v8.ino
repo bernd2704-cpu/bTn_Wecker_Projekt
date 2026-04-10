@@ -244,6 +244,7 @@ static char snapTouchBuf[SNAP_BUF_LEN] = "(noch keine Daten)";
 static char snapTouchTime[20]          = "";
 static char snapStackBuf[SNAP_BUF_LEN] = "(noch keine Daten)";
 static char snapStackTime[20]          = "";
+static char snapNtpTime[20]            = "";
 
 // Schreibt eine Nachricht in den Ring-Puffer (thread-safe).
 // Bleibt still wenn Mutex noch nicht initialisiert.
@@ -1730,8 +1731,12 @@ static void webLogTask(void *pvParam) {
       " &nbsp;|&nbsp; Aktualisiert: <span id='upd'></span></h3>";
 
     // ── Ring-Puffer ──────────────────────────────────────────
-    html += "<div class='sec-title'>Allgemeines Log</div>"
-            "<div id='log'>";
+    {
+      String ntpTs = strlen(snapNtpTime) > 0 ? String(snapNtpTime) : String("–");
+      html += "<div class='sec-title'>Allgemeines Log &ndash; letzter Reset: "
+              "<span style='color:#4A9EFF'>" + ntpTs + "</span></div>";
+    }
+    html += "<div id='log'>";
     if (webLogMutex && xSemaphoreTake(webLogMutex, pdMS_TO_TICKS(200)) == pdTRUE) {
       uint16_t start = (webLogCount < WEBLOG_LINES)
                      ? 0
@@ -1927,6 +1932,7 @@ void setup() {
       }
     }
     webLog("[NTP] Synchronisation OK");
+    snapTimeStr(snapNtpTime, sizeof(snapNtpTime));
   }
 
   // ── GPIO ─────────────────────────────────────────────────

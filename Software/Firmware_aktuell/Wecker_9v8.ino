@@ -1,5 +1,5 @@
 // bTn Wecker mit OLED-Anzeige und MP3-Player
-// Basis: bTn_Alarm_9v7 – FreeRTOS + State Machine + WiFi-Konfigurator
+// Basis: bTn_Alarm_9v8 – FreeRTOS + State Machine + WiFi-Konfigurator
 // Boardverwalter: esp32 3.3.7 von Espressif Systems
 //
 // ─── State Machines ──────────────────────────────────────────
@@ -59,7 +59,7 @@
 #include <esp_task_wdt.h>             // ESP32 Hardware Task Watchdog Timer (TWDT)
 
 // ── Konfiguration ────────────────────────────────────────────
-#include "SysConf_9v7.h"                                                                 // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
+#include "SysConf_9v8.h"                                                                 // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
 #include "WEB.h"
 
 const char PGMInfo[] = "bTn_Alarm_" FW_VERSION;                                          // PROGMEM-fähig; kein String-Heap-Fragment
@@ -224,7 +224,7 @@ static volatile uint32_t wdg_alarmTask   = 0; // gesetzt von alarmTask   (alle 5
 //  webLog(msg) ersetzt Serial.*-Ausgaben nach WiFi-Connect.
 //  Schreibt in einen Ring-Puffer (WEBLOG_LINES Einträge).
 //  webLogTask startet einen HTTP-Server auf Port WEBLOG_PORT.
-//  Browser ruft / auf → HTML-Seite mit Auto-Refresh alle 10 s.
+//  Browser ruft / auf → HTML-Seite mit Auto-Refresh alle 20 s.
 //  /log liefert den aktuellen Pufferinhalt als plain text.
 //  webLogReady-Flag: webLog() puffert erst wenn Task gestartet.
 // =============================================================
@@ -1709,7 +1709,7 @@ static void webLogTask(void *pvParam) {
     String ip = WiFi.localIP().toString();
     String html =
       "<!DOCTYPE html><html><head><meta charset='UTF-8'>"
-      "<meta http-equiv='refresh' content='10'>"
+      "<meta http-equiv='refresh' content='20'>"
       "<title>bTn Wecker Log</title>"
       "<style>"
       "body{font-family:monospace;background:#1a1a2e;color:#e0e0e0;margin:0;padding:16px}"
@@ -1726,7 +1726,7 @@ static void webLogTask(void *pvParam) {
       ".sec-title{font-size:12px;color:#78909c;margin:16px 0 4px}"
       "</style></head><body>"
       "<h2>&#x1F553; bTn Wecker " FW_VERSION " &ndash; Web-Log</h2>"
-      "<h3>IP: " + ip + ":" + String(WEBLOG_PORT) + " &nbsp;|&nbsp; Auto-Refresh: 10 s"
+      "<h3>IP: " + ip + ":" + String(WEBLOG_PORT) + " &nbsp;|&nbsp; Auto-Refresh: 20 s"
       " &nbsp;|&nbsp; Aktualisiert: <span id='upd'></span></h3>";
 
     // ── Snapshot: Touch Baseline ─────────────────────────────

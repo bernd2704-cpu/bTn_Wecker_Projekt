@@ -1729,28 +1729,6 @@ static void webLogTask(void *pvParam) {
       "<h3>IP: " + ip + ":" + String(WEBLOG_PORT) + " &nbsp;|&nbsp; Auto-Refresh: 20 s"
       " &nbsp;|&nbsp; Aktualisiert: <span id='upd'></span></h3>";
 
-    // ── Snapshot: Touch Baseline ─────────────────────────────
-    if (webLogMutex && xSemaphoreTake(webLogMutex, pdMS_TO_TICKS(200)) == pdTRUE) {
-      String touchTime = String(snapTouchTime);
-      String touchContent = String(snapTouchBuf);
-      String stackTime = String(snapStackTime);
-      String stackContent = String(snapStackBuf);
-      xSemaphoreGive(webLogMutex);
-
-      touchContent.replace("<", "&lt;"); touchContent.replace(">", "&gt;");
-      stackContent.replace("<", "&lt;"); stackContent.replace(">", "&gt;");
-
-      html += "<div class='snap-wrap'>"
-              "<div class='snap-title'>Touch Baseline – letzte Kalibrierung: "
-              "<span class='ts'>" + touchTime + "</span></div>"
-              "<div class='snap-box'>" + touchContent + "</div></div>";
-
-      html += "<div class='snap-wrap'>"
-              "<div class='snap-title'>Stack High-Water Marks – letzte Messung: "
-              "<span class='ts'>" + stackTime + "</span></div>"
-              "<div class='snap-box'>" + stackContent + "</div></div>";
-    }
-
     // ── Ring-Puffer ──────────────────────────────────────────
     html += "<div class='sec-title'>Allgemeines Log</div>"
             "<div id='log'>";
@@ -1774,7 +1752,30 @@ static void webLogTask(void *pvParam) {
       }
       xSemaphoreGive(webLogMutex);
     }
-    html += "</div><script>document.getElementById('upd').textContent=new Date().toLocaleTimeString();</script></body></html>";
+    html += "</div>";
+
+    // ── Snapshot: Touch Baseline + Stack HWM ─────────────────
+    if (webLogMutex && xSemaphoreTake(webLogMutex, pdMS_TO_TICKS(200)) == pdTRUE) {
+      String touchTime = String(snapTouchTime);
+      String touchContent = String(snapTouchBuf);
+      String stackTime = String(snapStackTime);
+      String stackContent = String(snapStackBuf);
+      xSemaphoreGive(webLogMutex);
+
+      touchContent.replace("<", "&lt;"); touchContent.replace(">", "&gt;");
+      stackContent.replace("<", "&lt;"); stackContent.replace(">", "&gt;");
+
+      html += "<div class='snap-wrap'>"
+              "<div class='snap-title'>Touch Baseline – letzte Kalibrierung: "
+              "<span class='ts'>" + touchTime + "</span></div>"
+              "<div class='snap-box'>" + touchContent + "</div></div>";
+
+      html += "<div class='snap-wrap'>"
+              "<div class='snap-title'>Stack High-Water Marks – letzte Messung: "
+              "<span class='ts'>" + stackTime + "</span></div>"
+              "<div class='snap-box'>" + stackContent + "</div></div>";
+    }
+    html += "<script>document.getElementById('upd').textContent=new Date().toLocaleTimeString();</script></body></html>";
     logServer.send(200, "text/html; charset=UTF-8", html);
   });
 

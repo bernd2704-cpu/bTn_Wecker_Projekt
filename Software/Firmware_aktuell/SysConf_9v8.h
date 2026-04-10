@@ -5,7 +5,8 @@
 // Boardverwalter   : esp32 3.3.7 von Espressif Systems
 //
 // Änderungshistorie:
-//   9v8 – Web-Log Auto-Refresh 10 → 20 s
+//   9v8 – Web-Log Auto-Refresh 10 → 20 s; Reihenfolge: Allg. Log,
+//          Touch Baseline, Stack HWM
 //   9v7 – Bugfix: EVT_S3 aktualisiert nun lastTouchMs – Auto-Rückkehr von
 //          UI_INFO startete sofort statt nach 20 s (S3 hat EVT-ID 6 > EVT_T4=3)
 //   9v6 – Feature: Auto-Rückkehr zu Seite 0 nach 20 s jetzt auch für

@@ -1,5 +1,5 @@
 // bTn Wecker mit OLED-Anzeige und MP3-Player
-// Basis: bTn_Wecker_9v9 – FreeRTOS + State Machine + WiFi-Konfigurator
+// Basis: bTn_Wecker_9v10 – FreeRTOS + State Machine + WiFi-Konfigurator
 // Boardverwalter: esp32 3.3.7 von Espressif Systems
 //
 // ─── State Machines ──────────────────────────────────────────
@@ -59,7 +59,7 @@
 #include <esp_task_wdt.h>             // ESP32 Hardware Task Watchdog Timer (TWDT)
 
 // ── Konfiguration ────────────────────────────────────────────
-#include "SysConf_9v9.h"                                                                 // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
+#include "SysConf_9v10.h"                                                                // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
 #include "WEB.h"
 
 const char PGMInfo[] = "bTn_Wecker_" FW_VERSION;                                          // PROGMEM-fähig; kein String-Heap-Fragment
@@ -1964,8 +1964,23 @@ void setup() {
   zeigeZ16C(64, 49, "Sound ...");
   display.display();                                                                   // DFPlayer-Initialisierung anzeigen
   if (player.begin(Serial2, true, true)) {
-    delay(3000);
     webLog("[DFPlayer] Serial2 OK");
+    // readFileCounts() als Bereitschaftsprüfung: DFPlayer antwortet erst, wenn
+    // SD-Karte vollständig indiziert ist. Nach Power-On/Flash dauert das länger
+    // als nach Reset-Taste (DFPlayer bleibt dort unter Spannung). Erst danach
+    // playFolder aufrufen – kein UART-Verkehr mehr während der Wiedergabe.
+    {
+      uint32_t t0 = millis();
+      while (mp3Count < 1) {
+        if (millis() - t0 >= SETUP_MP3_TIMEOUT_MS) {
+          webLog("[DFPlayer] Timeout – mp3Count unbekannt");
+          mp3Count = 99;                                                                 // Fallback: MP3-Auswahl bis Datei 99 erlauben
+          break;
+        }
+        int16_t c = player.readFileCounts();
+        if (c > 0) mp3Count = c - 1;                                                     // c==0 → mp3Count bleibt 0, kein uint8_t-Unterlauf auf 255
+      }
+    }
     player.volume(vol);
     player.EQ(DFPLAYER_EQ_BASS);
     player.playFolder(2, 1);
@@ -1974,6 +1989,11 @@ void setup() {
   } else {
     webLog("[DFPlayer] Verbindung fehlgeschlagen!");
   }
+  if (sound1_assigned > mp3Count) sound1_assigned = 1;                                    // NVR-Wert > SD-Inhalt abfangen
+  if (sound2_assigned > mp3Count) sound2_assigned = 1;
+  snprintf(str_mp3, sizeof(str_mp3), "%03u", mp3Count);
+  snprintf(str_reset, sizeof(str_reset), "%04lu", (unsigned long)resetCount);            // rechtsbündig 4-stellig
+  webLogf("[DFPlayer] mp3Count: %d", mp3Count);
 
   // ── Startseite ───────────────────────────────────────────
   snprintf(datum_WiFi,  sizeof(datum_WiFi), "%04u%02u%02u", timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday);
@@ -1989,25 +2009,6 @@ void setup() {
   snprintf(str_cot,     sizeof(str_cot),     "%02u",      cuckoo_onTime);
   snprintf(str_coff,    sizeof(str_coff),    "%02u",      cuckoo_offTime);
   uiTransition(UI_CLOCK);                                                               // initialer Zustand + Bildschirm
-
-  // ── MP3-Anzahl ───────────────────────────────────────────
-  {
-    uint32_t t0 = millis();
-    while (mp3Count < 1) {
-      if (millis() - t0 >= SETUP_MP3_TIMEOUT_MS) {
-        webLog("[DFPlayer] Timeout – mp3Count unbekannt");
-        mp3Count = 99;                                                                   // Fallback: MP3-Auswahl bis Datei 99 erlauben
-        break;
-      }
-      int16_t c = player.readFileCounts();
-      if (c > 0) mp3Count = c - 1;                                                       // c==0 → mp3Count bleibt 0, kein uint8_t-Unterlauf auf 255
-    }
-  }
-  if (sound1_assigned > mp3Count) sound1_assigned = 1;                                    // NVR-Wert > SD-Inhalt abfangen
-  if (sound2_assigned > mp3Count) sound2_assigned = 1;
-  snprintf(str_mp3, sizeof(str_mp3), "%03u", mp3Count);
-  snprintf(str_reset, sizeof(str_reset), "%04lu", (unsigned long)resetCount);            // rechtsbündig 4-stellig
-  webLogf("[DFPlayer] mp3Count: %d", mp3Count);
 
   // ── FreeRTOS Tasks starten ───────────────────────────────
   if (xTaskCreatePinnedToCore(touchTask,    "touchTask",    STACK_TOUCH, nullptr, 2, &hTouchTask,   0) != pdPASS) rtosPanic("touchTask");   // Core 0, Prio 2

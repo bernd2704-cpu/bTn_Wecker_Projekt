@@ -1,10 +1,13 @@
 #pragma once
-// SysConf_9v9.h – Konfigurationskonstanten für bTn Wecker
-// Firmware-Version : 9v9
-// Datei-Version    : 9v9
+// SysConf_9v10.h – Konfigurationskonstanten für bTn Wecker
+// Firmware-Version : 9v10
+// Datei-Version    : 9v10
 // Boardverwalter   : esp32 3.3.7 von Espressif Systems
 //
 // Änderungshistorie:
+//   9v10– DFPlayer Start-Sound: readFileCounts() vor playFolder verschoben –
+//          Sound wird erst abgespielt wenn SD-Index aufgebaut ist; behebt
+//          Abbruch des Start-Sounds nach Power-On/Flash
 //   9v9 – Web-Log: Schriftgröße der Überschriften (h2, h3, .sec-title,
 //          .snap-title) auf 1rem / 1.6rem vergrößert
 //   9v8 – Web-Log Auto-Refresh 10 → 20 s; Reihenfolge: Allg. Log,
@@ -26,7 +29,7 @@
 //          Stack-Größen als Kommentar dokumentiert
 
 // ── Firmware-Version ─────────────────────────────────────────
-#define FW_VERSION "9v9"                                                       // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
+#define FW_VERSION "9v10"                                                      // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
 
 // ── WiFi ─────────────────────────────────────────────────────
 // STA_SSID / STA_PSK werden nicht mehr direkt genutzt.

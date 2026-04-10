@@ -1,5 +1,5 @@
 // bTn Wecker mit OLED-Anzeige und MP3-Player
-// Basis: bTn_Wecker_9v13 – FreeRTOS + State Machine + WiFi-Konfigurator
+// Basis: bTn_Wecker_9v14 – FreeRTOS + State Machine + WiFi-Konfigurator
 // Boardverwalter: esp32 3.3.7 von Espressif Systems
 //
 // ─── State Machines ──────────────────────────────────────────
@@ -59,7 +59,7 @@
 #include <esp_task_wdt.h>             // ESP32 Hardware Task Watchdog Timer (TWDT)
 
 // ── Konfiguration ────────────────────────────────────────────
-#include "SysConf_9v13.h"                                                                // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
+#include "SysConf_9v14.h"                                                                // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
 #include "WEB.h"
 
 const char PGMInfo[] = "bTn_Wecker_" FW_VERSION;                                          // PROGMEM-fähig; kein String-Heap-Fragment
@@ -118,6 +118,8 @@ static TaskHandle_t hInputTask   = nullptr;
 static TaskHandle_t hDisplayTask = nullptr;
 static TaskHandle_t hAlarmTask      = nullptr; // Handle für stackMonTask-Abfrage
 static TaskHandle_t hWatchdogTask   = nullptr; // Handle für watchdogTask
+static TaskHandle_t hStackMonTask   = nullptr; // 9v14: HWM-Abfrage von außerhalb
+static TaskHandle_t hWebLogTask     = nullptr; // 9v14: HWM-Abfrage von außerhalb
 
 // ── Hardware ─────────────────────────────────────────────────
 SSD1306Wire         display(0x3C, SDA, SCL, GEOMETRY_128_64);
@@ -146,7 +148,8 @@ static volatile bool wifiSyncPending = false;  // true: wifiTask hat neue Verbin
 volatile uint8_t t_hour;
 volatile uint8_t t_min;
 volatile uint8_t t_sec;
-volatile uint8_t t_sec_alt;
+// 9v14: t_sec_alt wanderte in displayTask als static – nur dieser Task
+// liest/schreibt; file-scope suggerierte fälschlich Mehr-Task-Zugriff.
 
 // ── Alarm ────────────────────────────────────────────────────
 bool    a1_on   = true;
@@ -318,7 +321,9 @@ static void updateSnapStack() {
   pos += snprintf(tmp + pos, sizeof(tmp) - pos,
     "  watchdogTask: %4u\n", uxTaskGetStackHighWaterMark(hWatchdogTask));
   pos += snprintf(tmp + pos, sizeof(tmp) - pos,
-    "  stackMonTask: %4u\n", uxTaskGetStackHighWaterMark(nullptr));
+    "  stackMonTask: %4u\n", uxTaskGetStackHighWaterMark(hStackMonTask));  // 9v14: Handle statt nullptr (identisch, aber konsistent)
+  pos += snprintf(tmp + pos, sizeof(tmp) - pos,
+    "  webLogTask  : %4u\n", uxTaskGetStackHighWaterMark(hWebLogTask));    // 9v14: neu mitgemessen
   pos += snprintf(tmp + pos, sizeof(tmp) - pos,
     "  Freier Heap : %u Bytes", esp_get_free_heap_size());
   if (webLogMutex && xSemaphoreTake(webLogMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
@@ -653,8 +658,12 @@ void readNVR() {
   if (sound1_assigned < 1) sound1_assigned = 1;                // DFPlayer: Dateinummer min. 1
   if (sound2_assigned < 1) sound2_assigned = 1;                // Obergrenze erst nach mp3Count bekannt
   if (vol > MAX_VOL)   vol = MAX_VOL;                  // Lautstärke 0–MAX_VOL
+}
 
-  resetCount  = data.getUInt("resetCount",   0);
+// 9v14: Reset-Zähler in eigener Funktion – readNVR() ist jetzt seiteneffektfrei.
+// Muss innerhalb einer offenen data.begin()/end()-Session aus setup() aufgerufen werden.
+void bumpResetCount() {
+  resetCount = data.getUInt("resetCount", 0);
   resetCount++;                                                                          // Neustart zählen
   data.putUInt("resetCount", resetCount);
 }
@@ -1519,6 +1528,7 @@ static void inputTask(void *pvParam) {
 // =============================================================
 static void displayTask(void *pvParam) {
   esp_task_wdt_add(NULL);          // Hardware-TWDT: diesen Task anmelden
+  static uint8_t t_sec_alt = 0xFF;                                                         // 9v14: task-lokal (früher file-scope)
   while (true) {
     esp_task_wdt_reset();          // Hardware-TWDT zurücksetzen – alle ~300 ms
     wdg_displayTask = millis();                                                            // Alive-Signal: vor Mutex – gültig auch wenn Mutex-Timeout auftritt
@@ -1881,6 +1891,7 @@ void setup() {
     data.putBool("state", true); // Erststart-Flag dauerhaft setzen
     writeNVR();
   }
+  bumpResetCount();                                                                      // 9v14: Reset-Zähler als separater Schritt
   data.end();
 
   // ── webLogMutex früh initialisieren: setup()-Meldungen puffern ─
@@ -2059,11 +2070,11 @@ void setup() {
   if (xTaskCreatePinnedToCore(alarmTask,    "alarmTask",    STACK_ALARM, nullptr, 2, &hAlarmTask,   0) != pdPASS) rtosPanic("alarmTask");   // Core 0, Prio 2 – getrennt von inputTask
   if (xTaskCreatePinnedToCore(wifiTask,     "wifiTask",     STACK_WIFI, nullptr, 1, &hWifiTask,    0) != pdPASS) rtosPanic("wifiTask");    // Core 0, Prio 1
   if (xTaskCreatePinnedToCore(nvrTask,      "nvrTask",      STACK_NVR, nullptr, 1, &hNvrTask,     0) != pdPASS) rtosPanic("nvrTask");     // Core 0, Prio 1
-  if (xTaskCreatePinnedToCore(stackMonTask, "stackMonTask", STACK_STACKMON, nullptr, 1, nullptr,          0) != pdPASS) rtosPanic("stackMonTask"); // Core 0, Prio 1
+  if (xTaskCreatePinnedToCore(stackMonTask, "stackMonTask", STACK_STACKMON, nullptr, 1, &hStackMonTask,   0) != pdPASS) rtosPanic("stackMonTask"); // Core 0, Prio 1
   if (xTaskCreatePinnedToCore(watchdogTask, "watchdogTask", STACK_WATCHDOG, nullptr, 1, &hWatchdogTask,   0) != pdPASS) rtosPanic("watchdogTask"); // Core 0, Prio 1
   if (xTaskCreatePinnedToCore(inputTask,    "inputTask",    STACK_INPUT, nullptr, 2, &hInputTask,   1) != pdPASS) rtosPanic("inputTask");   // Core 1, Prio 2
   if (xTaskCreatePinnedToCore(displayTask,  "displayTask",  STACK_DISPLAY, nullptr, 1, &hDisplayTask, 1) != pdPASS) rtosPanic("displayTask"); // Core 1, Prio 1
-  if (xTaskCreatePinnedToCore(webLogTask,   "webLogTask",   STACK_WEBLOG,  nullptr, 1, nullptr,       0) != pdPASS) rtosPanic("webLogTask");  // Core 0, Prio 1
+  if (xTaskCreatePinnedToCore(webLogTask,   "webLogTask",   STACK_WEBLOG,  nullptr, 1, &hWebLogTask,  0) != pdPASS) rtosPanic("webLogTask");  // Core 0, Prio 1
 
   // ── Hardware Task Watchdog Timer (TWDT) ──────────────
   // Initialisierung NACH Task-Start: Tasks müssen bereits laufen bevor
@@ -2072,7 +2083,7 @@ void setup() {
   // Timeout WDT_HARDWARE_MS kürzer als Software-Watchdog WDG_TIMEOUT_MS:
   // Hardware greift bei echtem CPU-Lock, Software bei logischem Freeze.
   const esp_task_wdt_config_t twdt_cfg = {
-    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_9v13.h
+    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_9v14.h
     .idle_core_mask = 0,               // Idle-Tasks nicht überwachen
     .trigger_panic  = true,            // Backtrace + Reset bei Ablauf
   };

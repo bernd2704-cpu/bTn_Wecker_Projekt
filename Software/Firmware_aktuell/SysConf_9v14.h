@@ -1,10 +1,17 @@
 #pragma once
-// SysConf_9v13.h – Konfigurationskonstanten für bTn Wecker
-// Firmware-Version : 9v13
-// Datei-Version    : 9v13
+// SysConf_9v14.h – Konfigurationskonstanten für bTn Wecker
+// Firmware-Version : 9v14
+// Datei-Version    : 9v14
 // Boardverwalter   : esp32 3.3.7 von Espressif Systems
 //
 // Änderungshistorie:
+//   9v14– Wartungsqualität (Kosmetik aus Code-Review):
+//          (1) resetCount++ aus readNVR() in bumpResetCount() ausgelagert –
+//              readNVR() hat keine Seiteneffekte mehr
+//          (2) t_sec_alt von file-scope in displayTask als static verschoben –
+//              signalisiert korrekt, dass nur displayTask zugreift
+//          (3) Task-Handles für stackMonTask und webLogTask ergänzt,
+//              updateSnapStack() zeigt jetzt auch deren Stack-HWM
 //   9v13– Mittlere Issues aus Code-Review behoben:
 //          (1) Race auf t_start4/lastCuckooMin zwischen inputTask und
 //              alarmTask dokumentiert – 32-bit-Writes auf Xtensa atomar,
@@ -51,7 +58,7 @@
 //          Stack-Größen als Kommentar dokumentiert
 
 // ── Firmware-Version ─────────────────────────────────────────
-#define FW_VERSION "9v13"                                                      // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
+#define FW_VERSION "9v14"                                                      // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
 
 // ── WiFi ─────────────────────────────────────────────────────
 // STA_SSID / STA_PSK werden nicht mehr direkt genutzt.

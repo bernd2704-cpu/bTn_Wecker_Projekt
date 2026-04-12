@@ -138,7 +138,7 @@ char    zeit_WiFi[9];
 
 // NTP-Callback schreibt in tmp-Puffer + setzt Flag.
 // displayTask überträgt unter displayMutex in datum_sync/zeit_sync.
-// Verhindert Race Condition zwischen SNTP-Task und menu(6).
+// Verhindert Race Condition zwischen SNTP-Task und menu(7).
 static char          datum_sync_tmp[9];
 static char          zeit_sync_tmp[9];
 static volatile bool ntpSyncPending  = false; // true: NTP-Callback hat neue Daten, displayTask überträgt
@@ -162,7 +162,7 @@ uint8_t a2_min  = 0;
 char    str_a2[6];
 
 volatile uint32_t t_start4 = 0;
-         uint32_t lastTouchMs = 0;                                                       // Zeitstempel letzter Touch-Event (EVT_T0–T4)
+         uint32_t lastTouchMs = 0;                                                       // Zeitstempel letzter Touch-/Taster-Event (EVT_T0–T4, EVT_S3)
 volatile uint32_t t_start6 = 0;
          uint32_t t_start7 = 0;
 
@@ -184,7 +184,7 @@ int16_t playerStatus = 0;      // nur Core 0: alarmTask schreibt, alarmTask lies
 int16_t mp3Count    = 0;
 char    str_mp3[4];
 uint32_t resetCount = 0;
-char     str_reset[5];                                                                   // "nnn" + null (max 999 Resets sichtbar)
+char     str_reset[5];                                                                   // "nnnn" + null (max 9999 Resets sichtbar)
 
 volatile bool safeChange = false;
 
@@ -610,7 +610,7 @@ void menu(uint8_t page) {   // uint8_t: Koordinatenbereich 0–7 entspricht UiSt
 
 
 // =============================================================
-//  NVR (Flash-Persistenz)  –  unverändert
+//  NVR (Flash-Persistenz)
 // =============================================================
 
 void writeNVR() {
@@ -1600,8 +1600,8 @@ static void alarmTask(void *pvParam) {
   while (true) {
     esp_task_wdt_reset();          // Hardware-TWDT zurücksetzen – alle 500 ms
     // Atomarer Zeitschnappschuss – verhindert Race Condition mit displayTask:
-    // displayTask (Pri 1) könnte mitten in showTime() von alarmTask (Pri 2) verdrängt
-    // werden und t_sec/t_min/t_hour inkonsistent hinterlassen.
+    // displayTask (Core 1) und alarmTask (Core 0) laufen parallel – showTime()
+    // könnte t_sec/t_min/t_hour gerade inkonsistent beschreiben.
     // localtime_r() ist re-entrant und schreibt nur in den lokalen Puffer.
     time_t    now_alarm;
     struct tm tm_alarm;
@@ -1665,10 +1665,9 @@ static void nvrTask(void *pvParam) {
 // =============================================================
 //  Task 7 – stackMonTask  (Core 0, Pri 1)
 //
-//  Gibt alle STACK_MON_INTERVAL_MS (60 s) den verbleibenden
-//  Stack-Platz jedes Tasks per Serial aus (in 4-Byte-Words).
+//  Aktualisiert alle STACK_MON_INTERVAL_MS (60 s) den
+//  Stack-HWM-Snapshot (Bytes) und freien Heap für die Web-Log-Seite.
 //  Ein Wert nahe 0 zeigt drohenden Stack-Überlauf an.
-//  Gibt zusätzlich den freien Heap aus.
 // =============================================================
 static void stackMonTask(void *pvParam) {
   while (true) {
@@ -1731,7 +1730,7 @@ static void watchdogTask(void *pvParam) {
 //  Task 9 – webLogTask  (Core 0, Pri 1)
 //
 //  Startet HTTP-Server auf Port WEBLOG_PORT sobald WiFi bereit.
-//  GET /     → HTML-Seite mit Auto-Refresh (alle 3 s)
+//  GET /     → HTML-Seite mit Auto-Refresh (alle 20 s)
 //  GET /log  → Ring-Puffer als plain text (neueste Zeilen zuerst)
 //  Der Task blockiert bis WiFi verbunden ist (prüft alle 2 s).
 //  Aktiv sobald sich ein Client verbindet.

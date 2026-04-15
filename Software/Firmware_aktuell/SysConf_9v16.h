@@ -1,10 +1,14 @@
 #pragma once
-// SysConf_9v15.h – Konfigurationskonstanten für bTn Wecker
-// Firmware-Version : 9v15
-// Datei-Version    : 9v15
+// SysConf_9v16.h – Konfigurationskonstanten für bTn Wecker
+// Firmware-Version : 9v16
+// Datei-Version    : 9v16
 // Boardverwalter   : esp32 3.3.8 von Espressif Systems
 //
 // Änderungshistorie:
+//   9v16– DFPlayer-Kaltstart robuster: player.begin() in Retry-Schleife mit
+//          DFP_INIT_TIMEOUT_MS/DFP_INIT_RETRY_MS; SETUP_MP3_TIMEOUT_MS
+//          5000 → 10000 ms (SD-Indizierung nach Power-On dauert länger als
+//          nach Reset-Taste)
 //   9v15– UI: Checkboxen von 7x7 auf 8x8 vergrößert; Checked-Darstellung als
 //          Rahmen (drawRect 8x8) plus innerer Füllung (fillRect 6x6) gemäß
 //          neuer Icon-Vorlage
@@ -61,7 +65,7 @@
 //          Stack-Größen als Kommentar dokumentiert
 
 // ── Firmware-Version ─────────────────────────────────────────
-#define FW_VERSION "9v15"                                                      // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
+#define FW_VERSION "9v16"                                                      // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
 
 // ── WiFi ─────────────────────────────────────────────────────
 // STA_SSID / STA_PSK werden nicht mehr direkt genutzt.
@@ -101,7 +105,9 @@
 // ── Setup-Timeouts (ms) ──────────────────────────────────────
 #define SETUP_WIFI_TIMEOUT_MS 30000                                            // max. Wartezeit auf WiFi-Verbindung
 #define SETUP_NTP_TIMEOUT_MS  30000                                            // max. Wartezeit auf erste NTP-Synchronisation
-#define SETUP_MP3_TIMEOUT_MS   5000                                            // max. Wartezeit auf DFPlayer Dateianzahl
+#define SETUP_MP3_TIMEOUT_MS  10000                                            // max. Wartezeit auf DFPlayer Dateianzahl (Kaltstart: SD-Indizierung)
+#define DFP_INIT_TIMEOUT_MS   10000                                            // max. Wartezeit auf erfolgreiches player.begin() (Kaltstart)
+#define DFP_INIT_RETRY_MS       500                                            // Pause zwischen player.begin()-Versuchen
 
 // ── Diagnose ─────────────────────────────────────────────────
 #define STACK_MON_INTERVAL_MS 60000UL                                          // Ausgabe-Intervall Stack-Überwachung (60 s)

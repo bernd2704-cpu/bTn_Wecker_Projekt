@@ -1,5 +1,5 @@
 // bTn Wecker mit OLED-Anzeige und MP3-Player
-// Basis: bTn_Wecker_9v15 – FreeRTOS + State Machine + WiFi-Konfigurator
+// Basis: bTn_Wecker_9v16 – FreeRTOS + State Machine + WiFi-Konfigurator
 // Boardverwalter: esp32 3.3.8 von Espressif Systems
 //
 // ─── State Machines ──────────────────────────────────────────
@@ -59,7 +59,7 @@
 #include <esp_task_wdt.h>             // ESP32 Hardware Task Watchdog Timer (TWDT)
 
 // ── Konfiguration ────────────────────────────────────────────
-#include "SysConf_9v15.h"                                                                // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
+#include "SysConf_9v16.h"                                                                // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
 #include "WEB.h"
 
 const char PGMInfo[] = "bTn_Wecker_" FW_VERSION;                                          // PROGMEM-fähig; kein String-Heap-Fragment
@@ -2007,10 +2007,23 @@ void setup() {
   attachInterrupt(S3, isrS3, FALLING);
 
   // ── DFPlayer ─────────────────────────────────────────────
+  // 9v16: Retry-Schleife um player.begin() – beim Kaltstart (Power-On) ist
+  // der DFPlayer noch in eigener Initialisierung; erster begin()-Versuch
+  // schlägt dann fehl. Nach Reset-Taste bleibt der DFPlayer unter Spannung
+  // und ist bereits indiziert, daher klappt begin() dort sofort.
   cleanTXT(0, 49, 128, 15);
   zeigeZ16C(64, 49, "Sound ...");
   display.display();                                                                   // DFPlayer-Initialisierung anzeigen
-  if (player.begin(Serial2, true, true)) {
+  bool dfpOk = false;
+  {
+    uint32_t t0 = millis();
+    while (millis() - t0 < DFP_INIT_TIMEOUT_MS) {
+      if (player.begin(Serial2, true, true)) { dfpOk = true; break; }
+      webLog("[DFPlayer] begin retry");
+      delay(DFP_INIT_RETRY_MS);
+    }
+  }
+  if (dfpOk) {
     webLog("[DFPlayer] Serial2 OK");
     // readFileCounts() als Bereitschaftsprüfung: DFPlayer antwortet erst, wenn
     // SD-Karte vollständig indiziert ist. Nach Power-On/Flash dauert das länger
@@ -2084,7 +2097,7 @@ void setup() {
   // Timeout WDT_HARDWARE_MS kürzer als Software-Watchdog WDG_TIMEOUT_MS:
   // Hardware greift bei echtem CPU-Lock, Software bei logischem Freeze.
   const esp_task_wdt_config_t twdt_cfg = {
-    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_9v15.h
+    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_9v16.h
     .idle_core_mask = 0,               // Idle-Tasks nicht überwachen
     .trigger_panic  = true,            // Backtrace + Reset bei Ablauf
   };

@@ -1,10 +1,14 @@
 #pragma once
-// SysConf_10v00.h – Konfigurationskonstanten für bTn Wecker
-// Firmware-Version : 10v00
-// Datei-Version    : 10v00
+// SysConf_10v01.h – Konfigurationskonstanten für bTn Wecker
+// Firmware-Version : 10v01
+// Datei-Version    : 10v01
 // Boardverwalter   : esp32 3.3.8 von Espressif Systems
 //
 // Änderungshistorie:
+//   10v01–DFPlayer-Init: 9v16-Retry-Logik zurückgenommen (player.begin()
+//          wieder als einmaliger Aufruf ohne Schleife); DFP_INIT_TIMEOUT_MS
+//          und DFP_INIT_RETRY_MS entfernt; SETUP_MP3_TIMEOUT_MS
+//          10000 → 5000 ms
 //   10v00–Display-Abschaltung nach 10 min ohne Touch (DISPLAY_TIMEOUT_MS);
 //          Berührung eines beliebigen Touchpads weckt Display erneut für
 //          10 min, das auslösende Touch-Event wird verworfen (andere
@@ -76,7 +80,7 @@
 //          Stack-Größen als Kommentar dokumentiert
 
 // ── Firmware-Version ─────────────────────────────────────────
-#define FW_VERSION "10v00"                                                     // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
+#define FW_VERSION "10v01"                                                     // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
 
 // ── WiFi ─────────────────────────────────────────────────────
 // STA_SSID / STA_PSK werden nicht mehr direkt genutzt.
@@ -116,9 +120,7 @@
 // ── Setup-Timeouts (ms) ──────────────────────────────────────
 #define SETUP_WIFI_TIMEOUT_MS 30000                                            // max. Wartezeit auf WiFi-Verbindung
 #define SETUP_NTP_TIMEOUT_MS  30000                                            // max. Wartezeit auf erste NTP-Synchronisation
-#define SETUP_MP3_TIMEOUT_MS  10000                                            // max. Wartezeit auf DFPlayer Dateianzahl (Kaltstart: SD-Indizierung)
-#define DFP_INIT_TIMEOUT_MS   10000                                            // max. Wartezeit auf erfolgreiches player.begin() (Kaltstart)
-#define DFP_INIT_RETRY_MS       500                                            // Pause zwischen player.begin()-Versuchen
+#define SETUP_MP3_TIMEOUT_MS   5000                                            // max. Wartezeit auf DFPlayer Dateianzahl
 
 // ── Diagnose ─────────────────────────────────────────────────
 #define STACK_MON_INTERVAL_MS 60000UL                                          // Ausgabe-Intervall Stack-Überwachung (60 s)

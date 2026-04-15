@@ -1,10 +1,13 @@
 #pragma once
-// SysConf_9v14.h – Konfigurationskonstanten für bTn Wecker
-// Firmware-Version : 9v14
-// Datei-Version    : 9v14
+// SysConf_9v15.h – Konfigurationskonstanten für bTn Wecker
+// Firmware-Version : 9v15
+// Datei-Version    : 9v15
 // Boardverwalter   : esp32 3.3.8 von Espressif Systems
 //
 // Änderungshistorie:
+//   9v15– UI: Checkboxen von 7x7 auf 8x8 vergrößert; Checked-Darstellung als
+//          Rahmen (drawRect 8x8) plus innerer Füllung (fillRect 6x6) gemäß
+//          neuer Icon-Vorlage
 //   9v14– Wartungsqualität (Kosmetik aus Code-Review):
 //          (1) resetCount++ aus readNVR() in bumpResetCount() ausgelagert –
 //              readNVR() hat keine Seiteneffekte mehr
@@ -58,7 +61,7 @@
 //          Stack-Größen als Kommentar dokumentiert
 
 // ── Firmware-Version ─────────────────────────────────────────
-#define FW_VERSION "9v14"                                                      // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
+#define FW_VERSION "9v15"                                                      // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
 
 // ── WiFi ─────────────────────────────────────────────────────
 // STA_SSID / STA_PSK werden nicht mehr direkt genutzt.

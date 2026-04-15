@@ -1,5 +1,5 @@
 // bTn Wecker mit OLED-Anzeige und MP3-Player
-// Basis: bTn_Wecker_9v14 – FreeRTOS + State Machine + WiFi-Konfigurator
+// Basis: bTn_Wecker_9v15 – FreeRTOS + State Machine + WiFi-Konfigurator
 // Boardverwalter: esp32 3.3.8 von Espressif Systems
 //
 // ─── State Machines ──────────────────────────────────────────
@@ -59,7 +59,7 @@
 #include <esp_task_wdt.h>             // ESP32 Hardware Task Watchdog Timer (TWDT)
 
 // ── Konfiguration ────────────────────────────────────────────
-#include "SysConf_9v14.h"                                                                // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
+#include "SysConf_9v15.h"                                                                // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
 #include "WEB.h"
 
 const char PGMInfo[] = "bTn_Wecker_" FW_VERSION;                                          // PROGMEM-fähig; kein String-Heap-Fragment
@@ -419,19 +419,19 @@ void zeigeZ16L(uint8_t xPos, uint8_t yPos, const char* TXT) {
 // Alarm-Checkboxen (nutzt pageselect – wird von uiTransition synchron gesetzt)
 void checkboxAlarm() {
   display.setColor(BLACK);
-  display.fillRect(68, 38, 7, 7);
-  display.fillRect(68, 55, 7, 7);
+  display.fillRect(68, 38, 8, 8);
+  display.fillRect(68, 55, 8, 8);
   display.setColor(WHITE);
   switch (pageselect) {
     case 0:
-      if (a1_on) { display.fillRect(68, 38, 7, 7); } else { display.drawRect(68, 38, 7, 7); }
-      if (a2_on) { display.fillRect(68, 55, 7, 7); } else { display.drawRect(68, 55, 7, 7); }
+      display.drawRect(68, 38, 8, 8); if (a1_on) { display.fillRect(69, 39, 6, 6); }
+      display.drawRect(68, 55, 8, 8); if (a2_on) { display.fillRect(69, 56, 6, 6); }
       break;
     case 1:
-      if (a1_on) { display.fillRect(68, 38, 7, 7); } else { display.drawRect(68, 38, 7, 7); }
+      display.drawRect(68, 38, 8, 8); if (a1_on) { display.fillRect(69, 39, 6, 6); }
       break;
     case 2:
-      if (a2_on) { display.fillRect(68, 55, 7, 7); } else { display.drawRect(68, 55, 7, 7); }
+      display.drawRect(68, 55, 8, 8); if (a2_on) { display.fillRect(69, 56, 6, 6); }
       break;
   }
   display.display();                                                                   // einmaliger Flush nach allen Zeichenoperationen
@@ -439,13 +439,14 @@ void checkboxAlarm() {
 
 void checkboxSound() {
   display.setColor(BLACK);
-  display.fillRect(68, 38, 7, 7);
-  display.fillRect(68, 55, 7, 7);
+  display.fillRect(68, 38, 8, 8);
+  display.fillRect(68, 55, 8, 8);
   display.setColor(WHITE);
   switch (pageselect) {
     case 3:
       if (sound1_on) {
-        display.fillRect(68, 38, 7, 7);
+        display.drawRect(68, 38, 8, 8);
+        display.fillRect(69, 39, 6, 6);
         display.display();                                                               // Checkbox anzeigen bevor Audio startet
         sound1_assigned = sound1_selected;
         if (xSemaphoreTake(playerMutex, pdMS_TO_TICKS(50)) == pdTRUE) {                  // 50 ms < 100 ms displayMutex-Timeout
@@ -453,7 +454,7 @@ void checkboxSound() {
           xSemaphoreGive(playerMutex);
         }
       } else {
-        display.drawRect(68, 38, 7, 7);
+        display.drawRect(68, 38, 8, 8);
         display.display();                                                               // Checkbox anzeigen bevor Player gestoppt
         if (xSemaphoreTake(playerMutex, pdMS_TO_TICKS(50)) == pdTRUE) {                  // 50 ms < 100 ms displayMutex-Timeout
           player.stop();
@@ -463,7 +464,8 @@ void checkboxSound() {
       break;
     case 4:
       if (sound2_on) {
-        display.fillRect(68, 55, 7, 7);
+        display.drawRect(68, 55, 8, 8);
+        display.fillRect(69, 56, 6, 6);
         display.display();                                                               // Checkbox anzeigen bevor Audio startet
         sound2_assigned = sound2_selected;
         if (xSemaphoreTake(playerMutex, pdMS_TO_TICKS(50)) == pdTRUE) {                  // 50 ms < 100 ms displayMutex-Timeout
@@ -471,7 +473,7 @@ void checkboxSound() {
           xSemaphoreGive(playerMutex);
         }
       } else {
-        display.drawRect(68, 55, 7, 7);
+        display.drawRect(68, 55, 8, 8);
         display.display();                                                               // Checkbox anzeigen bevor Player gestoppt
         if (xSemaphoreTake(playerMutex, pdMS_TO_TICKS(50)) == pdTRUE) {                  // 50 ms < 100 ms displayMutex-Timeout
           player.stop();
@@ -484,13 +486,13 @@ void checkboxSound() {
 
 void checkboxFunction() {
   display.setColor(BLACK);
-  display.fillRect(35, 21, 7, 7);
-  display.fillRect(35, 38, 7, 7);
-  display.fillRect(35, 55, 7, 7);
+  display.fillRect(35, 21, 8, 8);
+  display.fillRect(35, 38, 8, 8);
+  display.fillRect(35, 55, 8, 8);
   display.setColor(WHITE);
-  if (cuckoo_on) { display.fillRect(35, 21, 7, 7); } else { display.drawRect(35, 21, 7, 7); }
-  if (light_on)  { display.fillRect(35, 38, 7, 7); } else { display.drawRect(35, 38, 7, 7); }
-  if (wheel_on)  { display.fillRect(35, 55, 7, 7); } else { display.drawRect(35, 55, 7, 7); }
+  display.drawRect(35, 21, 8, 8); if (cuckoo_on) { display.fillRect(36, 22, 6, 6); }
+  display.drawRect(35, 38, 8, 8); if (light_on)  { display.fillRect(36, 39, 6, 6); }
+  display.drawRect(35, 55, 8, 8); if (wheel_on)  { display.fillRect(36, 56, 6, 6); }
   display.display();                                                                   // einmaliger Flush nach allen Zeichenoperationen
 }
 
@@ -2082,7 +2084,7 @@ void setup() {
   // Timeout WDT_HARDWARE_MS kürzer als Software-Watchdog WDG_TIMEOUT_MS:
   // Hardware greift bei echtem CPU-Lock, Software bei logischem Freeze.
   const esp_task_wdt_config_t twdt_cfg = {
-    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_9v14.h
+    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_9v15.h
     .idle_core_mask = 0,               // Idle-Tasks nicht überwachen
     .trigger_panic  = true,            // Backtrace + Reset bei Ablauf
   };

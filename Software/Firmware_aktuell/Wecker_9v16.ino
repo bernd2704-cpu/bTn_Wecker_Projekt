@@ -419,19 +419,19 @@ void zeigeZ16L(uint8_t xPos, uint8_t yPos, const char* TXT) {
 // Alarm-Checkboxen (nutzt pageselect – wird von uiTransition synchron gesetzt)
 void checkboxAlarm() {
   display.setColor(BLACK);
-  display.fillRect(68, 38, 8, 8);
-  display.fillRect(68, 55, 8, 8);
+  display.fillRect(67, 38, 8, 8);
+  display.fillRect(67, 55, 8, 8);
   display.setColor(WHITE);
   switch (pageselect) {
     case 0:
-      display.drawRect(68, 38, 8, 8); if (a1_on) { display.fillRect(70, 40, 6, 6); }
-      display.drawRect(68, 55, 8, 8); if (a2_on) { display.fillRect(70, 57, 6, 6); }
+      display.drawRect(67, 38, 8, 8); if (a1_on) { display.fillRect(69, 40, 4, 4); }
+      display.drawRect(67, 55, 8, 8); if (a2_on) { display.fillRect(69, 57, 4, 4); }
       break;
     case 1:
-      display.drawRect(68, 38, 8, 8); if (a1_on) { display.fillRect(70, 40, 6, 6); }
+      display.drawRect(67, 38, 8, 8); if (a1_on) { display.fillRect(69, 40, 4, 4); }
       break;
     case 2:
-      display.drawRect(68, 55, 8, 8); if (a2_on) { display.fillRect(70, 57, 6, 6); }
+      display.drawRect(67, 55, 8, 8); if (a2_on) { display.fillRect(69, 57, 4, 4); }
       break;
   }
   display.display();                                                                   // einmaliger Flush nach allen Zeichenoperationen
@@ -439,14 +439,14 @@ void checkboxAlarm() {
 
 void checkboxSound() {
   display.setColor(BLACK);
-  display.fillRect(68, 38, 8, 8);
-  display.fillRect(68, 55, 8, 8);
+  display.fillRect(67, 38, 8, 8);
+  display.fillRect(67, 55, 8, 8);
   display.setColor(WHITE);
   switch (pageselect) {
     case 3:
       if (sound1_on) {
-        display.drawRect(68, 38, 8, 8);
-        display.fillRect(70, 40, 6, 6);
+        display.drawRect(67, 38, 8, 8);
+        display.fillRect(69, 40, 4, 4);
         display.display();                                                               // Checkbox anzeigen bevor Audio startet
         sound1_assigned = sound1_selected;
         if (xSemaphoreTake(playerMutex, pdMS_TO_TICKS(50)) == pdTRUE) {                  // 50 ms < 100 ms displayMutex-Timeout
@@ -454,7 +454,7 @@ void checkboxSound() {
           xSemaphoreGive(playerMutex);
         }
       } else {
-        display.drawRect(68, 38, 8, 8);
+        display.drawRect(67, 38, 8, 8);
         display.display();                                                               // Checkbox anzeigen bevor Player gestoppt
         if (xSemaphoreTake(playerMutex, pdMS_TO_TICKS(50)) == pdTRUE) {                  // 50 ms < 100 ms displayMutex-Timeout
           player.stop();
@@ -464,8 +464,8 @@ void checkboxSound() {
       break;
     case 4:
       if (sound2_on) {
-        display.drawRect(68, 55, 8, 8);
-        display.fillRect(70, 57, 6, 6);
+        display.drawRect(67, 55, 8, 8);
+        display.fillRect(69, 57, 4, 4);
         display.display();                                                               // Checkbox anzeigen bevor Audio startet
         sound2_assigned = sound2_selected;
         if (xSemaphoreTake(playerMutex, pdMS_TO_TICKS(50)) == pdTRUE) {                  // 50 ms < 100 ms displayMutex-Timeout
@@ -473,7 +473,7 @@ void checkboxSound() {
           xSemaphoreGive(playerMutex);
         }
       } else {
-        display.drawRect(68, 55, 8, 8);
+        display.drawRect(67, 55, 8, 8);
         display.display();                                                               // Checkbox anzeigen bevor Player gestoppt
         if (xSemaphoreTake(playerMutex, pdMS_TO_TICKS(50)) == pdTRUE) {                  // 50 ms < 100 ms displayMutex-Timeout
           player.stop();
@@ -486,13 +486,13 @@ void checkboxSound() {
 
 void checkboxFunction() {
   display.setColor(BLACK);
-  display.fillRect(35, 21, 8, 8);
-  display.fillRect(35, 38, 8, 8);
-  display.fillRect(35, 55, 8, 8);
+  display.fillRect(34, 21, 8, 8);
+  display.fillRect(34, 38, 8, 8);
+  display.fillRect(34, 55, 8, 8);
   display.setColor(WHITE);
-  display.drawRect(35, 21, 8, 8); if (cuckoo_on) { display.fillRect(37, 23, 6, 6); }
-  display.drawRect(35, 38, 8, 8); if (light_on)  { display.fillRect(37, 40, 6, 6); }
-  display.drawRect(35, 55, 8, 8); if (wheel_on)  { display.fillRect(37, 57, 6, 6); }
+  display.drawRect(34, 21, 8, 8); if (cuckoo_on) { display.fillRect(36, 23, 4, 4); }
+  display.drawRect(34, 38, 8, 8); if (light_on)  { display.fillRect(36, 40, 4, 4); }
+  display.drawRect(34, 55, 8, 8); if (wheel_on)  { display.fillRect(36, 57, 4, 4); }
   display.display();                                                                   // einmaliger Flush nach allen Zeichenoperationen
 }
 

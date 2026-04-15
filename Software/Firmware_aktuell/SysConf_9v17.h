@@ -1,10 +1,12 @@
 #pragma once
-// SysConf_9v16.h – Konfigurationskonstanten für bTn Wecker
-// Firmware-Version : 9v16
-// Datei-Version    : 9v16
+// SysConf_9v17.h – Konfigurationskonstanten für bTn Wecker
+// Firmware-Version : 9v17
+// Datei-Version    : 9v17
 // Boardverwalter   : esp32 3.3.8 von Espressif Systems
 //
 // Änderungshistorie:
+//   9v17– UI: Checkbox-Rahmen von 1px auf 2px verdickt (zwei verschachtelte
+//          drawRect 8x8 und 6x6); alle Checkboxen um 1px nach oben verschoben
 //   9v16– DFPlayer-Kaltstart robuster: player.begin() in Retry-Schleife mit
 //          DFP_INIT_TIMEOUT_MS/DFP_INIT_RETRY_MS; SETUP_MP3_TIMEOUT_MS
 //          5000 → 10000 ms (SD-Indizierung nach Power-On dauert länger als
@@ -65,7 +67,7 @@
 //          Stack-Größen als Kommentar dokumentiert
 
 // ── Firmware-Version ─────────────────────────────────────────
-#define FW_VERSION "9v16"                                                      // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
+#define FW_VERSION "9v17"                                                      // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
 
 // ── WiFi ─────────────────────────────────────────────────────
 // STA_SSID / STA_PSK werden nicht mehr direkt genutzt.

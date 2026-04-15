@@ -59,7 +59,7 @@
 #include <esp_task_wdt.h>             // ESP32 Hardware Task Watchdog Timer (TWDT)
 
 // ── Konfiguration ────────────────────────────────────────────
-#include "SysConf_9v18.h"                                                                // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
+#include "SysConf_10v00.h"                                                               // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
 #include "WEB.h"
 
 const char PGMInfo[] = "bTn_Wecker_" FW_VERSION;                                          // PROGMEM-fähig; kein String-Heap-Fragment
@@ -163,6 +163,7 @@ char    str_a2[6];
 
 volatile uint32_t t_start4 = 0;
          uint32_t lastTouchMs = 0;                                                       // Zeitstempel letzter Touch-/Taster-Event (EVT_T0–T4, EVT_S3)
+static volatile bool displayBlanked = false;                                             // 10v00: true wenn OLED nach DISPLAY_TIMEOUT_MS abgeschaltet wurde
 volatile uint32_t t_start6 = 0;
          uint32_t t_start7 = 0;
 
@@ -424,14 +425,14 @@ void checkboxAlarm() {
   display.setColor(WHITE);
   switch (pageselect) {
     case 0:
-      display.drawRect(67, 37, 10, 10); display.drawRect(68, 38, 8, 8); if (a1_on) { display.fillRect(70, 40, 4, 4); }
-      display.drawRect(67, 54, 10, 10); display.drawRect(68, 55, 8, 8); if (a2_on) { display.fillRect(70, 57, 4, 4); }
+      display.drawRect(67, 37, 10, 10); if (a1_on) { display.fillRect(70, 40, 4, 4); }
+      display.drawRect(67, 54, 10, 10); if (a2_on) { display.fillRect(70, 57, 4, 4); }
       break;
     case 1:
-      display.drawRect(67, 37, 10, 10); display.drawRect(68, 38, 8, 8); if (a1_on) { display.fillRect(70, 40, 4, 4); }
+      display.drawRect(67, 37, 10, 10); if (a1_on) { display.fillRect(70, 40, 4, 4); }
       break;
     case 2:
-      display.drawRect(67, 54, 10, 10); display.drawRect(68, 55, 8, 8); if (a2_on) { display.fillRect(70, 57, 4, 4); }
+      display.drawRect(67, 54, 10, 10); if (a2_on) { display.fillRect(70, 57, 4, 4); }
       break;
   }
   display.display();                                                                   // einmaliger Flush nach allen Zeichenoperationen
@@ -446,7 +447,6 @@ void checkboxSound() {
     case 3:
       if (sound1_on) {
         display.drawRect(67, 37, 10, 10);
-        display.drawRect(68, 38, 8, 8);
         display.fillRect(70, 40, 4, 4);
         display.display();                                                               // Checkbox anzeigen bevor Audio startet
         sound1_assigned = sound1_selected;
@@ -456,7 +456,6 @@ void checkboxSound() {
         }
       } else {
         display.drawRect(67, 37, 10, 10);
-        display.drawRect(68, 38, 8, 8);
         display.display();                                                               // Checkbox anzeigen bevor Player gestoppt
         if (xSemaphoreTake(playerMutex, pdMS_TO_TICKS(50)) == pdTRUE) {                  // 50 ms < 100 ms displayMutex-Timeout
           player.stop();
@@ -467,7 +466,6 @@ void checkboxSound() {
     case 4:
       if (sound2_on) {
         display.drawRect(67, 54, 10, 10);
-        display.drawRect(68, 55, 8, 8);
         display.fillRect(70, 57, 4, 4);
         display.display();                                                               // Checkbox anzeigen bevor Audio startet
         sound2_assigned = sound2_selected;
@@ -477,7 +475,6 @@ void checkboxSound() {
         }
       } else {
         display.drawRect(67, 54, 10, 10);
-        display.drawRect(68, 55, 8, 8);
         display.display();                                                               // Checkbox anzeigen bevor Player gestoppt
         if (xSemaphoreTake(playerMutex, pdMS_TO_TICKS(50)) == pdTRUE) {                  // 50 ms < 100 ms displayMutex-Timeout
           player.stop();
@@ -494,9 +491,9 @@ void checkboxFunction() {
   display.fillRect(32, 37, 10, 10);
   display.fillRect(32, 54, 10, 10);
   display.setColor(WHITE);
-  display.drawRect(32, 20, 10, 10); display.drawRect(33, 21, 8, 8); if (cuckoo_on) { display.fillRect(35, 23, 4, 4); }
-  display.drawRect(32, 37, 10, 10); display.drawRect(33, 38, 8, 8); if (light_on)  { display.fillRect(35, 40, 4, 4); }
-  display.drawRect(32, 54, 10, 10); display.drawRect(33, 55, 8, 8); if (wheel_on)  { display.fillRect(35, 57, 4, 4); }
+  display.drawRect(32, 20, 10, 10); if (cuckoo_on) { display.fillRect(35, 23, 4, 4); }
+  display.drawRect(32, 37, 10, 10); if (light_on)  { display.fillRect(35, 40, 4, 4); }
+  display.drawRect(32, 54, 10, 10); if (wheel_on)  { display.fillRect(35, 57, 4, 4); }
   display.display();                                                                   // einmaliger Flush nach allen Zeichenoperationen
 }
 
@@ -1394,6 +1391,20 @@ static void inputTask(void *pvParam) {
     }
     wdg_inputTask = millis();                                                          // Alive-Signal: Event empfangen
 
+    // ── 10v00: Display abgeschaltet → Touch weckt, Event wird verworfen ──
+    // Spec: Berührung eines Touchpads schaltet Display erneut für 10 min
+    // ein; andere Touch-Funktionen sind nur bei eingeschaltetem Display
+    // aktiv. Hardware-Taster S1/S2/S3 arbeiten unabhängig weiter.
+    if (displayBlanked && evt <= EVT_T4) {
+      if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        display.displayOn();
+        displayBlanked = false;
+        xSemaphoreGive(displayMutex);
+      }
+      lastTouchMs = millis();                                                            // 10-min-Timer neu starten
+      continue;                                                                          // Touch-Event nicht an State-Machine weitergeben
+    }
+
     // ── S1: Alarm/Sound stoppen oder Kuckuck einmalig ───────────
     // Kein Display nötig → außerhalb displayMutex.
     // vTaskDelay (player.readState-Schleife) ist damit nie unter Mutex.
@@ -1585,6 +1596,14 @@ static void displayTask(void *pvParam) {
       if (uiState != UI_CLOCK &&
           (millis() - lastTouchMs >= AUTO_RETURN_MS)) {
         uiTransition(UI_CLOCK);  // Auto-Rückkehr: menu() übernimmt display.display()
+      }
+
+      // 10v00: OLED nach DISPLAY_TIMEOUT_MS (10 min) ohne Touch-Event abschalten.
+      // Wecken erfolgt in inputTask bei Berührung eines Touchpads.
+      if (!displayBlanked &&
+          (millis() - lastTouchMs >= DISPLAY_TIMEOUT_MS)) {
+        display.displayOff();
+        displayBlanked = true;
       }
 
       xSemaphoreGive(displayMutex);
@@ -2101,7 +2120,7 @@ void setup() {
   // Timeout WDT_HARDWARE_MS kürzer als Software-Watchdog WDG_TIMEOUT_MS:
   // Hardware greift bei echtem CPU-Lock, Software bei logischem Freeze.
   const esp_task_wdt_config_t twdt_cfg = {
-    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_9v18.h
+    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_10v00.h
     .idle_core_mask = 0,               // Idle-Tasks nicht überwachen
     .trigger_panic  = true,            // Backtrace + Reset bei Ablauf
   };

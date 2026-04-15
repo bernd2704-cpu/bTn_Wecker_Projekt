@@ -1,10 +1,16 @@
 #pragma once
-// SysConf_9v18.h – Konfigurationskonstanten für bTn Wecker
-// Firmware-Version : 9v18
-// Datei-Version    : 9v18
+// SysConf_10v00.h – Konfigurationskonstanten für bTn Wecker
+// Firmware-Version : 10v00
+// Datei-Version    : 10v00
 // Boardverwalter   : esp32 3.3.8 von Espressif Systems
 //
 // Änderungshistorie:
+//   10v00–Display-Abschaltung nach 10 min ohne Touch (DISPLAY_TIMEOUT_MS);
+//          Berührung eines beliebigen Touchpads weckt Display erneut für
+//          10 min, das auslösende Touch-Event wird verworfen (andere
+//          Touch-Funktionen nur bei eingeschaltetem Display aktiv);
+//          Checkbox-Rahmen vereinfacht (nur äußerer 10x10 drawRect, keine
+//          inneren 8x8 drawRects mehr – schlankere Darstellung)
 //   9v18– UI: Checkboxen auf 10x10 vergrößert (2px Rahmen + 1px Abstand
 //          + 4x4 Check-Füllung); Checkboxen auf Seite Funktion um 2px
 //          nach links verschoben (x 34 → 32)
@@ -70,7 +76,7 @@
 //          Stack-Größen als Kommentar dokumentiert
 
 // ── Firmware-Version ─────────────────────────────────────────
-#define FW_VERSION "9v18"                                                      // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
+#define FW_VERSION "10v00"                                                     // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
 
 // ── WiFi ─────────────────────────────────────────────────────
 // STA_SSID / STA_PSK werden nicht mehr direkt genutzt.
@@ -127,6 +133,7 @@ const uint32_t BTN_DEBOUNCE_MS      =   30;                                    /
 const uint32_t BTN_LOCKOUT_MS       = 1000;                                    // Aktionssperre in inputTask: verhindert bewusste Doppeldrücke
 const uint32_t CUCKOO_DURATION_MS   = 7500;                                    // Kuckuck-Laufzeit
 const uint32_t AUTO_RETURN_MS       = 20000;                                   // Auto-Rückkehr zu Seite 0
+const uint32_t DISPLAY_TIMEOUT_MS   = 600000UL;                                // OLED aus nach 10 min ohne Touch-Event
 const uint32_t ALARM_POLL_MS        = 5000;                                    // Alarm-Nachlauf Prüfintervall
 const uint32_t WIFI_RECONNECT_MS    = 3000;                                    // WiFi-Reconnect Wiederholrate
 

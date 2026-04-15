@@ -1,10 +1,12 @@
 #pragma once
-// SysConf_10v02.h – Konfigurationskonstanten für bTn Wecker
-// Firmware-Version : 10v02
-// Datei-Version    : 10v02
+// SysConf_10v03.h – Konfigurationskonstanten für bTn Wecker
+// Firmware-Version : 10v03
+// Datei-Version    : 10v03
 // Boardverwalter   : esp32 3.3.8 von Espressif Systems
 //
 // Änderungshistorie:
+//   10v03–Display wird bei Alarm-Start automatisch eingeschaltet (analog
+//          Touch-Wake); Helper wakeDisplay() in alarmTask
 //   10v02–Display-Ein-Zeit DISPLAY_TIMEOUT_MS 10 min → 5 min
 //   10v01–DFPlayer-Init: 9v16-Retry-Logik zurückgenommen (player.begin()
 //          wieder als einmaliger Aufruf ohne Schleife); DFP_INIT_TIMEOUT_MS
@@ -81,7 +83,7 @@
 //          Stack-Größen als Kommentar dokumentiert
 
 // ── Firmware-Version ─────────────────────────────────────────
-#define FW_VERSION "10v02"                                                     // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
+#define FW_VERSION "10v03"                                                     // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
 
 // ── WiFi ─────────────────────────────────────────────────────
 // STA_SSID / STA_PSK werden nicht mehr direkt genutzt.

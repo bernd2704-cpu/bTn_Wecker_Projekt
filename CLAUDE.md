@@ -9,7 +9,7 @@ Taster S1=GPIO32/S2=GPIO33/S3=GPIO0, Ausgänge E1=GPIO25/E2=GPIO26/E3=GPIO27
 Firmware 9v14, Konfiguration SysConf_9v14.h
 
 ## Architektur
-FreeRTOS, 9 Tasks auf 2 Cores, Arduino IDE / ESP32 Core 3.3.7
+FreeRTOS, 9 Tasks auf 2 Cores, Arduino IDE / ESP32 Core 3.3.8
 Stack-Größen als STACK_*-Konstanten in SysConf_*.h
 
 ## Wichtige Regeln

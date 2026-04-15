@@ -2,7 +2,7 @@
 // SysConf_9v14.h – Konfigurationskonstanten für bTn Wecker
 // Firmware-Version : 9v14
 // Datei-Version    : 9v14
-// Boardverwalter   : esp32 3.3.7 von Espressif Systems
+// Boardverwalter   : esp32 3.3.8 von Espressif Systems
 //
 // Änderungshistorie:
 //   9v14– Wartungsqualität (Kosmetik aus Code-Review):

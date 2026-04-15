@@ -1,6 +1,6 @@
 // bTn Wecker mit OLED-Anzeige und MP3-Player
 // Basis: bTn_Wecker_9v14 – FreeRTOS + State Machine + WiFi-Konfigurator
-// Boardverwalter: esp32 3.3.7 von Espressif Systems
+// Boardverwalter: esp32 3.3.8 von Espressif Systems
 //
 // ─── State Machines ──────────────────────────────────────────
 //

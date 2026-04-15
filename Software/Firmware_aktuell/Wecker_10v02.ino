@@ -59,7 +59,7 @@
 #include <esp_task_wdt.h>             // ESP32 Hardware Task Watchdog Timer (TWDT)
 
 // ── Konfiguration ────────────────────────────────────────────
-#include "SysConf_10v01.h"                                                               // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
+#include "SysConf_10v02.h"                                                               // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
 #include "WEB.h"
 
 const char PGMInfo[] = "bTn_Wecker_" FW_VERSION;                                          // PROGMEM-fähig; kein String-Heap-Fragment
@@ -1598,7 +1598,7 @@ static void displayTask(void *pvParam) {
         uiTransition(UI_CLOCK);  // Auto-Rückkehr: menu() übernimmt display.display()
       }
 
-      // 10v00: OLED nach DISPLAY_TIMEOUT_MS (10 min) ohne Touch-Event abschalten.
+      // 10v00: OLED nach DISPLAY_TIMEOUT_MS (5 min) ohne Touch-Event abschalten.
       // Wecken erfolgt in inputTask bei Berührung eines Touchpads.
       if (!displayBlanked &&
           (millis() - lastTouchMs >= DISPLAY_TIMEOUT_MS)) {
@@ -2107,7 +2107,7 @@ void setup() {
   // Timeout WDT_HARDWARE_MS kürzer als Software-Watchdog WDG_TIMEOUT_MS:
   // Hardware greift bei echtem CPU-Lock, Software bei logischem Freeze.
   const esp_task_wdt_config_t twdt_cfg = {
-    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_10v01.h
+    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_10v02.h
     .idle_core_mask = 0,               // Idle-Tasks nicht überwachen
     .trigger_panic  = true,            // Backtrace + Reset bei Ablauf
   };

@@ -1,10 +1,11 @@
 #pragma once
-// SysConf_10v01.h – Konfigurationskonstanten für bTn Wecker
-// Firmware-Version : 10v01
-// Datei-Version    : 10v01
+// SysConf_10v02.h – Konfigurationskonstanten für bTn Wecker
+// Firmware-Version : 10v02
+// Datei-Version    : 10v02
 // Boardverwalter   : esp32 3.3.8 von Espressif Systems
 //
 // Änderungshistorie:
+//   10v02–Display-Ein-Zeit DISPLAY_TIMEOUT_MS 10 min → 5 min
 //   10v01–DFPlayer-Init: 9v16-Retry-Logik zurückgenommen (player.begin()
 //          wieder als einmaliger Aufruf ohne Schleife); DFP_INIT_TIMEOUT_MS
 //          und DFP_INIT_RETRY_MS entfernt; SETUP_MP3_TIMEOUT_MS
@@ -80,7 +81,7 @@
 //          Stack-Größen als Kommentar dokumentiert
 
 // ── Firmware-Version ─────────────────────────────────────────
-#define FW_VERSION "10v01"                                                     // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
+#define FW_VERSION "10v02"                                                     // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
 
 // ── WiFi ─────────────────────────────────────────────────────
 // STA_SSID / STA_PSK werden nicht mehr direkt genutzt.
@@ -135,7 +136,7 @@ const uint32_t BTN_DEBOUNCE_MS      =   30;                                    /
 const uint32_t BTN_LOCKOUT_MS       = 1000;                                    // Aktionssperre in inputTask: verhindert bewusste Doppeldrücke
 const uint32_t CUCKOO_DURATION_MS   = 7500;                                    // Kuckuck-Laufzeit
 const uint32_t AUTO_RETURN_MS       = 20000;                                   // Auto-Rückkehr zu Seite 0
-const uint32_t DISPLAY_TIMEOUT_MS   = 600000UL;                                // OLED aus nach 10 min ohne Touch-Event
+const uint32_t DISPLAY_TIMEOUT_MS   = 300000UL;                                // OLED aus nach 5 min ohne Touch-Event
 const uint32_t ALARM_POLL_MS        = 5000;                                    // Alarm-Nachlauf Prüfintervall
 const uint32_t WIFI_RECONNECT_MS    = 3000;                                    // WiFi-Reconnect Wiederholrate
 

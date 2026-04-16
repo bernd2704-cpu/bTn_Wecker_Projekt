@@ -1,10 +1,13 @@
 #pragma once
-// SysConf_10v05.h – Konfigurationskonstanten für bTn Wecker
-// Firmware-Version : 10v05
-// Datei-Version    : 10v05
+// SysConf_10v06.h – Konfigurationskonstanten für bTn Wecker
+// Firmware-Version : 10v06
+// Datei-Version    : 10v06
 // Boardverwalter   : esp32 3.3.8 von Espressif Systems
 //
 // Änderungshistorie:
+//   10v06–wakeDisplay(): TOCTOU + Race auf lastTouchMs behoben (displayBlanked-Check
+//         und lastTouchMs=millis() jetzt atomar unter displayMutex);
+//         lastTouchMs als volatile deklariert (Cross-Core-Sichtbarkeit Core0→Core1)
 //   10v05–DFPlayer TX-Pin (GPIO17) vor Serial2.begin() 3s LOW halten
 //   10v04–Web-Log: Zeile "[Reset] Anzahl: N" → "[RESET] resetCount: N"
 //   10v03–Display wird bei Alarm-Start automatisch eingeschaltet (analog
@@ -85,7 +88,7 @@
 //          Stack-Größen als Kommentar dokumentiert
 
 // ── Firmware-Version ─────────────────────────────────────────
-#define FW_VERSION "10v05"                                                     // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
+#define FW_VERSION "10v06"                                                     // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
 
 // ── WiFi ─────────────────────────────────────────────────────
 // STA_SSID / STA_PSK werden nicht mehr direkt genutzt.

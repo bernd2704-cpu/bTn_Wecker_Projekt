@@ -59,7 +59,7 @@
 #include <esp_task_wdt.h>             // ESP32 Hardware Task Watchdog Timer (TWDT)
 
 // ── Konfiguration ────────────────────────────────────────────
-#include "SysConf_10v05.h"                                                               // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
+#include "SysConf_10v06.h"                                                               // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
 #include "WEB.h"
 
 const char PGMInfo[] = "bTn_Wecker_" FW_VERSION;                                          // PROGMEM-fähig; kein String-Heap-Fragment
@@ -162,7 +162,7 @@ uint8_t a2_min  = 0;
 char    str_a2[6];
 
 volatile uint32_t t_start4 = 0;
-         uint32_t lastTouchMs = 0;                                                       // Zeitstempel letzter Touch-/Taster-Event (EVT_T0–T4, EVT_S3)
+volatile uint32_t lastTouchMs = 0;                                                       // Zeitstempel letzter Touch-/Taster-Event (EVT_T0–T4, EVT_S3)
 static volatile bool displayBlanked = false;                                             // 10v00: true wenn OLED nach DISPLAY_TIMEOUT_MS abgeschaltet wurde
 volatile uint32_t t_start6 = 0;
          uint32_t t_start7 = 0;
@@ -1117,13 +1117,14 @@ static uint8_t lastA2Min = 0xFF;
 
 // Display einschalten, falls abgeschaltet – analog zum Touch-Wake in inputTask.
 static void wakeDisplay() {
-  if (!displayBlanked) return;
   if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-    display.displayOn();
-    displayBlanked = false;
+    if (displayBlanked) {
+      display.displayOn();
+      displayBlanked = false;
+      lastTouchMs = millis();
+    }
     xSemaphoreGive(displayMutex);
   }
-  lastTouchMs = millis();
 }
 
 // ── Alarm-State-Machine ──────────────────────────────────────
@@ -2124,7 +2125,7 @@ void setup() {
   // Timeout WDT_HARDWARE_MS kürzer als Software-Watchdog WDG_TIMEOUT_MS:
   // Hardware greift bei echtem CPU-Lock, Software bei logischem Freeze.
   const esp_task_wdt_config_t twdt_cfg = {
-    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_10v05.h
+    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_10v06.h
     .idle_core_mask = 0,               // Idle-Tasks nicht überwachen
     .trigger_panic  = true,            // Backtrace + Reset bei Ablauf
   };

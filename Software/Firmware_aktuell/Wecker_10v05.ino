@@ -2071,7 +2071,7 @@ void setup() {
     player.volume(vol);
     player.EQ(DFPLAYER_EQ_BASS);
     player.playFolder(2, 1);
-    delay(1000);
+    delay(3000);
     playerStatus = 1;
   } else {
     webLog("[DFPlayer] Verbindung fehlgeschlagen!");

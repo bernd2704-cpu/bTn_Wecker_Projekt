@@ -34,7 +34,7 @@
 //                             Core 0: physisch getrennt von inputTask → kein CPU-Scheduling-Konflikt
 //  wifiTask    Core 0  Pri 1  WiFi-Reconnect
 //  nvrTask     Core 0  Pri 1  Flash-Sicherung bei Änderung
-//  stackMonTask Core 0 Pri 1  Stack-Überwachung (Serial)
+//  stackMonTask Core 0 Pri 1  Stack-HWM + Heap-Snapshot für Web-Log
 //  watchdogTask Core 0 Pri 1  Anwendungs-Watchdog: inputTask / displayTask / alarmTask
 //  webLogTask   Core 0 Pri 1  HTTP-Server Port WEBLOG_PORT → Ring-Puffer als Web-Seite
 //
@@ -142,9 +142,9 @@ char    zeit_WiFi[9];
 static char          datum_sync_tmp[9];
 static char          zeit_sync_tmp[9];
 static volatile bool ntpSyncPending  = false; // true: NTP-Callback hat neue Daten, displayTask überträgt
-static char          datum_WiFi_tmp[9];        // Double-Buffer: wifiTask schreibt hier (Core 0, kein Mutex nötig)
+static char          datum_WiFi_tmp[9];        // Double-Buffer: wifiTask schreibt nur bei !wifiSyncPending (Core 0)
 static char          zeit_WiFi_tmp[9];         // displayTask überträgt unter displayMutex nach datum_WiFi/zeit_WiFi
-static volatile bool wifiSyncPending = false;  // true: wifiTask hat neue Verbindungsdaten
+static volatile bool wifiSyncPending = false;  // 11v00: dient zugleich als Schreibsperre für wifiTask (verhindert Torn-Read)
 volatile uint8_t t_hour;
 volatile uint8_t t_min;
 volatile uint8_t t_sec;
@@ -1402,7 +1402,8 @@ void IRAM_ATTR isrS3() {
 //    EVT_S1, EVT_S2 → vor displayMutex behandeln (kein Display nötig,
 //                     kein vTaskDelay unter Mutex)
 //    alle anderen   → displayMutex holen → uiDispatch → uiTransition
-//    safeChange     → nvrSemaphore
+//    safeChange     → nvrSemaphore (erst NACH NVR_COMMIT_DELAY_MS Ruhezeit
+//                     seit safeChangeMs – schützt Flash vor Touch-REPEAT-Hammer)
 // =============================================================
 static void inputTask(void *pvParam) {
   esp_task_wdt_add(NULL);          // Hardware-TWDT: diesen Task anmelden
@@ -1421,16 +1422,17 @@ static void inputTask(void *pvParam) {
     wdg_inputTask = millis();                                                          // Alive-Signal: Event empfangen
 
     // ── 10v00: Display abgeschaltet → Touch weckt, Event wird verworfen ──
-    // Spec: Berührung eines Touchpads schaltet Display erneut für 10 min
-    // ein; andere Touch-Funktionen sind nur bei eingeschaltetem Display
-    // aktiv. Hardware-Taster S1/S2/S3 arbeiten unabhängig weiter.
+    // Spec: Berührung eines Touchpads schaltet Display erneut für
+    // DISPLAY_TIMEOUT_MS (5 min, seit 10v02) ein; andere Touch-Funktionen
+    // sind nur bei eingeschaltetem Display aktiv. Hardware-Taster S1/S2/S3
+    // arbeiten unabhängig weiter.
     if (displayBlanked && evt <= EVT_T4) {
       if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         display.displayOn();
         displayBlanked = false;
         xSemaphoreGive(displayMutex);
       }
-      lastTouchMs = millis();                                                            // 10-min-Timer neu starten
+      lastTouchMs = millis();                                                            // DISPLAY_TIMEOUT_MS-Timer neu starten
       continue;                                                                          // Touch-Event nicht an State-Machine weitergeben
     }
 

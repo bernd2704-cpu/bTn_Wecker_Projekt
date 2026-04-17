@@ -2022,13 +2022,17 @@ void setup() {
     wifiConnected = (WiFi.status() == WL_CONNECTED);
   }
   if (wifiConnected) {
-    // 11v00: Projektregel – nach WiFi-Connect ausschließlich webLogf();
-    // Log-URL direkt in die IP-Zeile integriert (statt separatem Serial.printf).
+    // Ausnahme zur Projektregel "nach WiFi-Connect nur webLogf()":
+    // Die Web-Log-Adresse MUSS im Serial-Monitor erscheinen, sonst ist
+    // das Web-Log praktisch unerreichbar – die URL steht ja erst im
+    // Web-Log selbst, das ohne bekannte Adresse nicht aufgerufen werden
+    // kann. Dieses eine Serial.printf ist daher betrieblich notwendig.
+    Serial.printf("\nWiFi connected – IP: %s  Log: http://%s:%u\n",
+                  WiFi.localIP().toString().c_str(),
+                  WiFi.localIP().toString().c_str(),
+                  (unsigned)WEBLOG_PORT);
     webLog("[WiFi] connected");
-    webLogf("[WiFi] IP: %s  Log: http://%s:%u",
-            WiFi.localIP().toString().c_str(),
-            WiFi.localIP().toString().c_str(),
-            (unsigned)WEBLOG_PORT);
+    webLogf("[WiFi] IP: %s", WiFi.localIP().toString().c_str());
 
     // ── NTP warten ─────────────────────────────────────────
     cleanTXT(0, 49, 128, 15);

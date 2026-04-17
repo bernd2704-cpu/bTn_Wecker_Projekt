@@ -12,8 +12,11 @@
 //         (2) wifiTask Double-Buffer Race: snprintf nur wenn kein altes
 //             Paar mehr pending ist (wifiSyncPending-Guard) – schließt
 //             Torn-Read-Fenster gegen displayTask.
-//         (3) Log-Regel: Serial.printf nach WiFi-Connect in setup()
-//             durch webLogf ersetzt; Log-URL in IP-Zeile integriert.
+//         (3) Review-Vorschlag zur Log-Regel (Serial.printf nach
+//             WiFi-Connect durch webLogf ersetzen) bewusst NICHT
+//             übernommen: die Web-Log-URL muss im Serial-Monitor
+//             erscheinen, sonst ist das Web-Log unerreichbar
+//             (Adresse steht ja erst im Web-Log selbst).
 //   10v06–wakeDisplay(): TOCTOU + Race auf lastTouchMs behoben (displayBlanked-Check
 //         und lastTouchMs=millis() jetzt atomar unter displayMutex);
 //         lastTouchMs als volatile deklariert (Cross-Core-Sichtbarkeit Core0→Core1)

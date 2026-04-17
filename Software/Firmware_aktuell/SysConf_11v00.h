@@ -1,10 +1,19 @@
 #pragma once
-// SysConf_10v06.h – Konfigurationskonstanten für bTn Wecker
-// Firmware-Version : 10v06
-// Datei-Version    : 10v06
+// SysConf_11v00.h – Konfigurationskonstanten für bTn Wecker
+// Firmware-Version : 11v00
+// Datei-Version    : 11v00
 // Boardverwalter   : esp32 3.3.8 von Espressif Systems
 //
 // Änderungshistorie:
+//   11v00–Review-Fixes:
+//         (1) NVR-Flash-Wear: nvrSemaphore-Release erst NACH Ruhezeit
+//             NVR_COMMIT_DELAY_MS (2 s) ohne neues Event – verhindert
+//             Flash-Writes bei gehaltener Einstelltaste im Touch-REPEAT.
+//         (2) wifiTask Double-Buffer Race: snprintf nur wenn kein altes
+//             Paar mehr pending ist (wifiSyncPending-Guard) – schließt
+//             Torn-Read-Fenster gegen displayTask.
+//         (3) Log-Regel: Serial.printf nach WiFi-Connect in setup()
+//             durch webLogf ersetzt; Log-URL in IP-Zeile integriert.
 //   10v06–wakeDisplay(): TOCTOU + Race auf lastTouchMs behoben (displayBlanked-Check
 //         und lastTouchMs=millis() jetzt atomar unter displayMutex);
 //         lastTouchMs als volatile deklariert (Cross-Core-Sichtbarkeit Core0→Core1)
@@ -88,7 +97,7 @@
 //          Stack-Größen als Kommentar dokumentiert
 
 // ── Firmware-Version ─────────────────────────────────────────
-#define FW_VERSION "10v06"                                                     // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
+#define FW_VERSION "11v00"                                                     // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
 
 // ── WiFi ─────────────────────────────────────────────────────
 // STA_SSID / STA_PSK werden nicht mehr direkt genutzt.
@@ -146,6 +155,7 @@ const uint32_t AUTO_RETURN_MS       = 20000;                                   /
 const uint32_t DISPLAY_TIMEOUT_MS   = 300000UL;                                // OLED aus nach 5 min ohne Touch-Event
 const uint32_t ALARM_POLL_MS        = 5000;                                    // Alarm-Nachlauf Prüfintervall
 const uint32_t WIFI_RECONNECT_MS    = 3000;                                    // WiFi-Reconnect Wiederholrate
+const uint32_t NVR_COMMIT_DELAY_MS  = 2000;                                    // 11v00: Ruhezeit nach letztem Event vor NVR-Commit (Flash-Wear-Schutz)
 
 // ── NVR-Zugriffsmodus ────────────────────────────────────────
 const bool ReadWrite = false;                                                  // Preferences: Lesen + Schreiben

@@ -59,7 +59,7 @@
 #include <esp_task_wdt.h>             // ESP32 Hardware Task Watchdog Timer (TWDT)
 
 // ── Konfiguration ────────────────────────────────────────────
-#include "SysConf_10v06.h"                                                               // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
+#include "SysConf_11v00.h"                                                               // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
 #include "WEB.h"
 
 const char PGMInfo[] = "bTn_Wecker_" FW_VERSION;                                          // PROGMEM-fähig; kein String-Heap-Fragment
@@ -188,6 +188,18 @@ uint32_t resetCount = 0;
 char     str_reset[5];                                                                   // "nnnn" + null (max 9999 Resets sichtbar)
 
 volatile bool safeChange = false;
+// 11v00: Zeitstempel des letzten Events, das safeChange gesetzt hat.
+// inputTask gibt nvrSemaphore erst frei, wenn seit diesem Zeitpunkt
+// mind. NVR_COMMIT_DELAY_MS ohne weiteres Event vergangen sind.
+// Schützt Flash vor Writes bei gehaltener Einstelltaste (Touch-REPEAT).
+static volatile uint32_t safeChangeMs = 0;
+
+// 11v00: Markiert eine persistierbare Änderung – Timestamp wird bei jedem
+// neuen Event aktualisiert, sodass der Debounce-Zeitraum neu beginnt.
+static inline void markSafeChange() {
+  safeChangeMs = millis();
+  safeChange   = true;
+}
 
 // ── Taster Toggle-Status ─────────────────────────────────────
 bool          S2_SW = false;                                                             // Toggle-Status Zugschalter
@@ -848,7 +860,7 @@ static UiState onClock(uint8_t evt) {
         cleanTXT(115, 17, 15, 10);
         zeigeZ10L(115, 17, str_vol);
         display.display();                                                               // partielles Update übertragen
-        safeChange = true;
+        markSafeChange();
       }
       break;
     case EVT_T4:                                                                         // Lautstärke –
@@ -862,7 +874,7 @@ static UiState onClock(uint8_t evt) {
         cleanTXT(115, 17, 15, 10);
         zeigeZ10L(115, 17, str_vol);
         display.display();                                                               // partielles Update übertragen
-        safeChange = true;
+        markSafeChange();
       }
       break;
   }
@@ -875,7 +887,7 @@ static UiState onAlarm1(uint8_t evt) {
     case EVT_T2:
       a1_on = !a1_on;
       checkboxAlarm();
-      safeChange = true;
+      markSafeChange();
       break;
     case EVT_T3:                                                                         // Stunde +
       if (a1_hour < 23) { a1_hour++; } else { a1_hour = 0; }
@@ -883,7 +895,7 @@ static UiState onAlarm1(uint8_t evt) {
       cleanTXT(82, 34, 46, 13);
       zeigeZ16C(105, 32, str_a1);
       display.display();                                                                 // partielles Update übertragen
-      safeChange = true;
+      markSafeChange();
       break;
     case EVT_T4:                                                                         // Minute +
       if (a1_min < 59) { a1_min++; } else { a1_min = 0; }
@@ -891,7 +903,7 @@ static UiState onAlarm1(uint8_t evt) {
       cleanTXT(82, 34, 46, 13);
       zeigeZ16C(105, 32, str_a1);
       display.display();                                                                 // partielles Update übertragen
-      safeChange = true;
+      markSafeChange();
       break;
   }
   return UI_ALARM1;
@@ -903,7 +915,7 @@ static UiState onAlarm2(uint8_t evt) {
     case EVT_T2:
       a2_on = !a2_on;
       checkboxAlarm();
-      safeChange = true;
+      markSafeChange();
       break;
     case EVT_T3:                                                                         // Stunde +
       if (a2_hour < 23) { a2_hour++; } else { a2_hour = 0; }
@@ -911,7 +923,7 @@ static UiState onAlarm2(uint8_t evt) {
       cleanTXT(82, 51, 46, 13);                                                          // A2-Zeile (Y=49) – war fälschlich 34 (A1-Zeile)
       zeigeZ16C(105, 49, str_a2);
       display.display();                                                                 // partielles Update übertragen
-      safeChange = true;
+      markSafeChange();
       break;
     case EVT_T4:                                                                         // Minute +
       if (a2_min < 59) { a2_min++; } else { a2_min = 0; }
@@ -919,7 +931,7 @@ static UiState onAlarm2(uint8_t evt) {
       cleanTXT(82, 51, 46, 13);
       zeigeZ16C(105, 49, str_a2);
       display.display();                                                                 // partielles Update übertragen
-      safeChange = true;
+      markSafeChange();
       break;
   }
   return UI_ALARM2;
@@ -945,7 +957,7 @@ static UiState onSound1(uint8_t evt) {
       zeigeZ16C(105, 32, str_s1);
       sound1_on = false;
       checkboxSound();
-      safeChange = true;
+      markSafeChange();
       break;
     case EVT_T4:                                                                         // Sound 1 –
       // 9v13: Fallback auf 1 wenn mp3Count == 0 – vermeidet ungültige
@@ -957,7 +969,7 @@ static UiState onSound1(uint8_t evt) {
       zeigeZ16C(105, 32, str_s1);
       sound1_on = false;
       checkboxSound();
-      safeChange = true;
+      markSafeChange();
       break;
   }
   return UI_SOUND1;
@@ -983,7 +995,7 @@ static UiState onSound2(uint8_t evt) {
       zeigeZ16C(105, 49, str_s2);                                                        // S2-Zeile – war fälschlich 32 (S1-Zeile)
       sound2_on = false;
       checkboxSound();
-      safeChange = true;
+      markSafeChange();
       break;
     case EVT_T4:                                                                         // Sound 2 –
       // 9v13: Fallback auf 1 wenn mp3Count == 0 (analog Sound 1)
@@ -994,7 +1006,7 @@ static UiState onSound2(uint8_t evt) {
       zeigeZ16C(105, 49, str_s2);
       sound2_on = false;
       checkboxSound();
-      safeChange = true;
+      markSafeChange();
       break;
   }
   return UI_SOUND2;
@@ -1006,17 +1018,17 @@ static UiState onFuncs(uint8_t evt) {
     case EVT_T2:
       cuckoo_on = !cuckoo_on;
       checkboxFunction();
-      safeChange = true;
+      markSafeChange();
       break;
     case EVT_T3:
       light_on = !light_on;
       checkboxFunction();
-      safeChange = true;
+      markSafeChange();
       break;
     case EVT_T4:
       wheel_on = !wheel_on;
       checkboxFunction();
-      safeChange = true;
+      markSafeChange();
       break;
   }
   return UI_FUNCS;
@@ -1031,7 +1043,7 @@ static UiState onCuckooTime(uint8_t evt) {
       cleanTXT(78, 35, 23, 13);
       zeigeZ16C(91, 32, str_cot);
       display.display();                                                                 // partielles Update übertragen
-      safeChange = true;
+      markSafeChange();
       break;
     case EVT_T4:                                                                         // bis hh +
       if (cuckoo_offTime < 23) { cuckoo_offTime++; } else { cuckoo_offTime = 0; }
@@ -1039,7 +1051,7 @@ static UiState onCuckooTime(uint8_t evt) {
       cleanTXT(78, 52, 23, 13);
       zeigeZ16C(91, 49, str_coff);
       display.display();                                                                 // partielles Update übertragen
-      safeChange = true;
+      markSafeChange();
       break;
   }
   return UI_CUCKOO_TIME;
@@ -1400,7 +1412,10 @@ static void inputTask(void *pvParam) {
     esp_task_wdt_reset();          // Hardware-TWDT zurücksetzen – alle ~50 ms
     if (xQueueReceive(inputQueue, &evt, pdMS_TO_TICKS(50)) != pdTRUE) {
       wdg_inputTask = millis();                                                        // Alive-Signal: Task läuft (auch bei leerem Queue)
-      if (safeChange) { safeChange = false; xSemaphoreGive(nvrSemaphore); }
+      if (safeChange && (millis() - safeChangeMs >= NVR_COMMIT_DELAY_MS)) {
+        safeChange = false;
+        xSemaphoreGive(nvrSemaphore);
+      }
       continue;
     }
     wdg_inputTask = millis();                                                          // Alive-Signal: Event empfangen
@@ -1469,7 +1484,10 @@ static void inputTask(void *pvParam) {
           lastCuckooMin = t_min;                                                         // Minuten-Sperre setzen → kein Doppelstart durch Auto-Trigger
         }
       }
-      if (safeChange) { safeChange = false; xSemaphoreGive(nvrSemaphore); }
+      if (safeChange && (millis() - safeChangeMs >= NVR_COMMIT_DELAY_MS)) {
+        safeChange = false;
+        xSemaphoreGive(nvrSemaphore);
+      }
       continue;
     }
 
@@ -1488,7 +1506,10 @@ static void inputTask(void *pvParam) {
           digitalWrite(E3, LOW);
         }
       }
-      if (safeChange) { safeChange = false; xSemaphoreGive(nvrSemaphore); }
+      if (safeChange && (millis() - safeChangeMs >= NVR_COMMIT_DELAY_MS)) {
+        safeChange = false;
+        xSemaphoreGive(nvrSemaphore);
+      }
       continue;
     }
 
@@ -1542,7 +1563,10 @@ static void inputTask(void *pvParam) {
       ESP.restart();
     }
 
-    if (safeChange) { safeChange = false; xSemaphoreGive(nvrSemaphore); }
+    if (safeChange && (millis() - safeChangeMs >= NVR_COMMIT_DELAY_MS)) {
+      safeChange = false;
+      xSemaphoreGive(nvrSemaphore);
+    }
   }
 }
 
@@ -1669,15 +1693,20 @@ static void alarmTask(void *pvParam) {
 static void wifiTask(void *pvParam) {
   while (true) {
     if (WiFi.status() != WL_CONNECTED && delayFunction(t_start7, WIFI_RECONNECT_MS)) {
+      // 11v00: tmp-Puffer nur dann neu beschreiben, wenn displayTask das
+      // vorherige Paar bereits übernommen hat (wifiSyncPending == false).
+      // Ohne diesen Guard könnte wifiTask mitten in den memcpy der
+      // displayTask hineinschreiben → Torn-Read in datum_WiFi/zeit_WiFi.
       // Lokaler Snapshot via localtime_r() – thread-safe, kein Mutex nötig.
-      // Verhindert Torn-Read der globalen tm-Struct (wird auf Core 1 von showTime() beschrieben).
-      time_t    now_local;
-      struct tm tm_local;
-      time(&now_local);
-      localtime_r(&now_local, &tm_local);
-      snprintf(datum_WiFi_tmp, sizeof(datum_WiFi_tmp), "%04u%02u%02u", tm_local.tm_year + 1900, tm_local.tm_mon + 1, tm_local.tm_mday);
-      snprintf(zeit_WiFi_tmp,  sizeof(zeit_WiFi_tmp),  "%02u:%02u:%02u", tm_local.tm_hour, tm_local.tm_min, tm_local.tm_sec);
-      wifiSyncPending = true;  // displayTask überträgt unter displayMutex → kein torn read
+      if (!wifiSyncPending) {
+        time_t    now_local;
+        struct tm tm_local;
+        time(&now_local);
+        localtime_r(&now_local, &tm_local);
+        snprintf(datum_WiFi_tmp, sizeof(datum_WiFi_tmp), "%04u%02u%02u", tm_local.tm_year + 1900, tm_local.tm_mon + 1, tm_local.tm_mday);
+        snprintf(zeit_WiFi_tmp,  sizeof(zeit_WiFi_tmp),  "%02u:%02u:%02u", tm_local.tm_hour, tm_local.tm_min, tm_local.tm_sec);
+        wifiSyncPending = true;  // displayTask überträgt unter displayMutex → kein torn read
+      }
       WiFi.begin(sta_ssid, sta_psk);                                                     // Laufzeit-Credentials aus NVR
       t_start7 = millis();
     }
@@ -1991,12 +2020,13 @@ void setup() {
     wifiConnected = (WiFi.status() == WL_CONNECTED);
   }
   if (wifiConnected) {
-    Serial.printf("\nWiFi connected – IP: %s  Log: http://%s:%u\n",
-                  WiFi.localIP().toString().c_str(),
-                  WiFi.localIP().toString().c_str(),
-                  (unsigned)WEBLOG_PORT);                  // letzte Serial-Ausgabe nach WiFi
+    // 11v00: Projektregel – nach WiFi-Connect ausschließlich webLogf();
+    // Log-URL direkt in die IP-Zeile integriert (statt separatem Serial.printf).
     webLog("[WiFi] connected");
-    webLogf("[WiFi] IP: %s", WiFi.localIP().toString().c_str());
+    webLogf("[WiFi] IP: %s  Log: http://%s:%u",
+            WiFi.localIP().toString().c_str(),
+            WiFi.localIP().toString().c_str(),
+            (unsigned)WEBLOG_PORT);
 
     // ── NTP warten ─────────────────────────────────────────
     cleanTXT(0, 49, 128, 15);
@@ -2125,7 +2155,7 @@ void setup() {
   // Timeout WDT_HARDWARE_MS kürzer als Software-Watchdog WDG_TIMEOUT_MS:
   // Hardware greift bei echtem CPU-Lock, Software bei logischem Freeze.
   const esp_task_wdt_config_t twdt_cfg = {
-    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_10v06.h
+    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_11v00.h
     .idle_core_mask = 0,               // Idle-Tasks nicht überwachen
     .trigger_panic  = true,            // Backtrace + Reset bei Ablauf
   };

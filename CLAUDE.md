@@ -6,11 +6,19 @@ DFPlayer Mini (Serial2, RX=16, TX=17), Touch T0=GPIO4/T2=GPIO2/T3=GPIO15/T4=GPIO
 Taster S1=GPIO32/S2=GPIO33/S3=GPIO0, Ausgänge E1=GPIO25/E2=GPIO26/E3=GPIO27
 
 ## Aktuelle Version
-Firmware 10v05, Konfiguration SysConf_10v05.h
+Firmware 11v00, Konfiguration SysConf_11v00.h
 
 ## Architektur
 FreeRTOS, 9 Tasks auf 2 Cores, Arduino IDE / ESP32 Core 3.3.8
 Stack-Größen als STACK_*-Konstanten in SysConf_*.h
+
+## Verwendete externe Libraries
+- SSD1306Wire (Header `SSD1306Wire.h`): ThingPulse *esp8266-oled-ssd1306*,
+  Autoren Daniel Eichhorn / Fabrice Weinberg.
+  Quelle: https://github.com/ThingPulse/esp8266-oled-ssd1306
+  Hinweis: Nicht zu verwechseln mit Alexander Pronins `SSD1306wire` (kleines w,
+  nur AVR, text-only) – wird hier NICHT verwendet.
+- DFRobotDFPlayerMini (DFPlayer Mini Steuerung über Serial2)
 
 ## Wichtige Regeln
 - Niemals vTaskDelay() unter gehaltenem Mutex aufrufen

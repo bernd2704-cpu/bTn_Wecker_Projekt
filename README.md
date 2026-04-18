@@ -5,7 +5,7 @@
 ESP32-basierter Wecker mit OLED-Anzeige, DFPlayer Mini (MP3),
 kapazitiven Touch-Pads, FreeRTOS und WiFi/NTP.
 
-**Aktuelle Firmware:** 9v14
+**Aktuelle Firmware:** 11v00
 
 ---
 
@@ -49,7 +49,7 @@ bTn_Wecker_Projekt/
 
 | Bibliothek                | Version   | Quelle             |
 |---------------------------|-----------|--------------------|
-| ESP32 Arduino Core        | 3.3.7     | Espressif          |
+| ESP32 Arduino Core        | 3.3.8     | Espressif          |
 | ThingPulse SSD1306Wire    | aktuell   | Arduino Library    |
 | DFRobotDFPlayerMini       | aktuell   | Arduino Library    |
 | FreeRTOS                  | (im Core) | Espressif          |

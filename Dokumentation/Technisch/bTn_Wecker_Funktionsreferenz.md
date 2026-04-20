@@ -92,6 +92,7 @@ Zwei-Stufen-Debouncing: ISR-Ebene BTN_DEBOUNCE_MS=30ms, Task-Ebene BTN_LOCKOUT_M
 | loop() | System | Löscht Arduino-Loop-Task sofort via vTaskDelete(nullptr). |
 | rtosPanic(what) | System | Fehlerbehandlung: Serial + OLED, 3s warten, ESP.restart(). |
 | delayFunction(t,d) | System | true wenn millis()-t >= d. Nicht-blockierende Zeitprüfung für State Machines. |
+| bTn_info() | System | Gibt Trennzeile und PGMInfo-Banner (Projekt-/Versionskennung) auf Serial aus. Einmaliger Aufruf am Ende von setup(). |
 
 ---
 

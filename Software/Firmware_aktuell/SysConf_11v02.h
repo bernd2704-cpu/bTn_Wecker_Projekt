@@ -1,10 +1,23 @@
 #pragma once
-// SysConf_11v01.h – Konfigurationskonstanten für bTn Wecker
-// Firmware-Version : 11v01
-// Datei-Version    : 11v01
+// SysConf_11v02.h – Konfigurationskonstanten für bTn Wecker
+// Firmware-Version : 11v02
+// Datei-Version    : 11v02
 // Boardverwalter   : esp32 3.3.8 von Espressif Systems
 //
 // Änderungshistorie:
+//   11v02–Sicherheit Info-Seite + Display-Wake:
+//         (1) S3 verhält sich bei ausgeschaltetem Display jetzt analog
+//             zu T0–T4: weckt das Display und verwirft das Event,
+//             statt den Info-Toggle durchzureichen. Verhindert, dass
+//             bei aktiver UI_INFO ohne Anzeige ein blind gedrückter
+//             Taster bzw. anschließender Touch versehentlich T0 (WLAN-
+//             Reset) oder T4 (Werksreset) auslöst.
+//         (2) Info-Seite zeigt die gefährlichen Aktionen explizit:
+//             Zeilen "T0: WLAN RESET SSID PW" und "T4: WERKSRESET"
+//             ersetzen die dort zuvor duplizierten WiFi-/NTP-Zeiten.
+//         (3) Web-Log: Rubrik "Status – Letzter Start" umbenannt in
+//             "Verbindung – letzter WiFi Reconnect / NTP Sync" und
+//             unter die Ring-Puffer-Sektion verschoben.
 //   11v01–Web-Log: neue Rubrik "Status – Letzter Start" zeigt die
 //          Zeilen WiFi und NTP analog zur Info-Seite (datum_WiFi/
 //          zeit_WiFi, datum_sync/zeit_sync); platziert oberhalb der
@@ -104,7 +117,7 @@
 //          Stack-Größen als Kommentar dokumentiert
 
 // ── Firmware-Version ─────────────────────────────────────────
-#define FW_VERSION "11v01"                                                     // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
+#define FW_VERSION "11v02"                                                     // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
 
 // ── WiFi ─────────────────────────────────────────────────────
 // STA_SSID / STA_PSK werden nicht mehr direkt genutzt.

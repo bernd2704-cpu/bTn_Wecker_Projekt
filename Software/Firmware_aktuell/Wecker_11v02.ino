@@ -59,7 +59,7 @@
 #include <esp_task_wdt.h>             // ESP32 Hardware Task Watchdog Timer (TWDT)
 
 // ── Konfiguration ────────────────────────────────────────────
-#include "SysConf_11v01.h"                                                               // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
+#include "SysConf_11v02.h"                                                               // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
 #include "WEB.h"
 
 const char PGMInfo[] = "bTn_Wecker_" FW_VERSION;                                          // PROGMEM-fähig; kein String-Heap-Fragment
@@ -600,12 +600,8 @@ void menu(uint8_t page) {   // uint8_t: Koordinatenbereich 0–7 entspricht UiSt
     case 7:
       display.clear();
       zeigeZ10C(63, 0, PGMInfo);
-      zeigeZ10L(1,  16, "WiFi");
-      zeigeZ10L(28, 16, datum_WiFi);
-      zeigeZ10L(82, 16, zeit_WiFi);
-      zeigeZ10L(1,  28, "NTP");
-      zeigeZ10L(28, 28, datum_sync);
-      zeigeZ10L(82, 28, zeit_sync);
+      zeigeZ10L(1,  16, "T0:  WLAN RESET SSID PW");
+      zeigeZ10L(1,  28, "T4:  WERKSRESET");
       zeigeZ10L(1,  40, "MP3");
       zeigeZ10L(28, 40, str_mp3);
       zeigeZ10C(78,  40, "RESET");
@@ -1424,16 +1420,21 @@ static void inputTask(void *pvParam) {
     // ── 10v00: Display abgeschaltet → Touch weckt, Event wird verworfen ──
     // Spec: Berührung eines Touchpads schaltet Display erneut für
     // DISPLAY_TIMEOUT_MS (5 min, seit 10v02) ein; andere Touch-Funktionen
-    // sind nur bei eingeschaltetem Display aktiv. Hardware-Taster S1/S2/S3
+    // sind nur bei eingeschaltetem Display aktiv. Hardware-Taster S1/S2
     // arbeiten unabhängig weiter.
-    if (displayBlanked && evt <= EVT_T4) {
+    // 11v02: S3 wird ebenfalls zum reinen Wake-Event, solange das Display
+    // aus ist. Grund: Wenn UI_INFO aktiv ist und das Display dunkel wird,
+    // darf ein blind gedrückter Taster nicht direkt den Info-Toggle auslösen
+    // bzw. T0/T4-Funktionen (WLAN-Reset / Werksreset) sichtbar machen, die
+    // der Nutzer dann versehentlich auslösen könnte.
+    if (displayBlanked && (evt <= EVT_T4 || evt == EVT_S3)) {
       if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         display.displayOn();
         displayBlanked = false;
         xSemaphoreGive(displayMutex);
       }
       lastTouchMs = millis();                                                            // DISPLAY_TIMEOUT_MS-Timer neu starten
-      continue;                                                                          // Touch-Event nicht an State-Machine weitergeben
+      continue;                                                                          // Wake-Event nicht an State-Machine weitergeben
     }
 
     // ── S1: Alarm/Sound stoppen oder Kuckuck einmalig ───────────
@@ -1844,20 +1845,6 @@ static void webLogTask(void *pvParam) {
       "<h3>IP: " + ip + ":" + String(WEBLOG_PORT) + " &nbsp;|&nbsp; Auto-Refresh: 20 s"
       " &nbsp;|&nbsp; Aktualisiert: <span id='upd'></span></h3>";
 
-    // ── Status: Letzter Start (WiFi + NTP analog Info-Seite) ─
-    {
-      String wDate = strlen(datum_WiFi) > 0 ? String(datum_WiFi) : String("–");
-      String wTime = strlen(zeit_WiFi)  > 0 ? String(zeit_WiFi)  : String("–");
-      String nDate = strlen(datum_sync) > 0 ? String(datum_sync) : String("–");
-      String nTime = strlen(zeit_sync)  > 0 ? String(zeit_sync)  : String("–");
-      html += "<div class='snap-wrap'>"
-              "<div class='snap-title'>Status &ndash; Letzter Start</div>"
-              "<div class='snap-box'>"
-              "  WiFi  " + wDate + "  " + wTime + "\n"
-              "  NTP   " + nDate + "  " + nTime +
-              "</div></div>";
-    }
-
     // ── Ring-Puffer ──────────────────────────────────────────
     {
       String ntpTs = strlen(snapNtpTime) > 0 ? String(snapNtpTime) : String("–");
@@ -1886,6 +1873,20 @@ static void webLogTask(void *pvParam) {
       xSemaphoreGive(webLogMutex);
     }
     html += "</div>";
+
+    // ── Verbindung: letzter Restart (WiFi + NTP analog Info-Seite) ─
+    {
+      String wDate = strlen(datum_WiFi) > 0 ? String(datum_WiFi) : String("–");
+      String wTime = strlen(zeit_WiFi)  > 0 ? String(zeit_WiFi)  : String("–");
+      String nDate = strlen(datum_sync) > 0 ? String(datum_sync) : String("–");
+      String nTime = strlen(zeit_sync)  > 0 ? String(zeit_sync)  : String("–");
+      html += "<div class='snap-wrap'>"
+              "<div class='snap-title'>Verbindung &ndash; letzter WiFi Reconnect / NTP Sync</div>"
+              "<div class='snap-box'>"
+              "  WiFi  " + wDate + "  " + wTime + "\n"
+              "  NTP   " + nDate + "  " + nTime +
+              "</div></div>";
+    }
 
     // ── Snapshot: Touch Baseline + Stack HWM ─────────────────
     if (webLogMutex && xSemaphoreTake(webLogMutex, pdMS_TO_TICKS(200)) == pdTRUE) {
@@ -2175,7 +2176,7 @@ void setup() {
   // Timeout WDT_HARDWARE_MS kürzer als Software-Watchdog WDG_TIMEOUT_MS:
   // Hardware greift bei echtem CPU-Lock, Software bei logischem Freeze.
   const esp_task_wdt_config_t twdt_cfg = {
-    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_11v01.h
+    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_11v02.h
     .idle_core_mask = 0,               // Idle-Tasks nicht überwachen
     .trigger_panic  = true,            // Backtrace + Reset bei Ablauf
   };

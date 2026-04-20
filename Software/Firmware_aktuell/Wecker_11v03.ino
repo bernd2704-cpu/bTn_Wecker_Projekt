@@ -59,7 +59,7 @@
 #include <esp_task_wdt.h>             // ESP32 Hardware Task Watchdog Timer (TWDT)
 
 // ── Konfiguration ────────────────────────────────────────────
-#include "SysConf_11v02.h"                                                               // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
+#include "SysConf_11v03.h"                                                               // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
 #include "WEB.h"
 
 const char PGMInfo[] = "bTn_Wecker_" FW_VERSION;                                          // PROGMEM-fähig; kein String-Heap-Fragment
@@ -672,11 +672,14 @@ void readNVR() {
 }
 
 // 9v14: Reset-Zähler in eigener Funktion – readNVR() ist jetzt seiteneffektfrei.
-// Muss innerhalb einer offenen data.begin()/end()-Session aus setup() aufgerufen werden.
+// 11v03: öffnet NVR-Namespace selbst (begin/end), wird erst NACH loadWifiCredentials()
+//        aufgerufen – so zählt ein Werksreset-Folgeboot in den WiFi-Konfigurator nicht mit.
 void bumpResetCount() {
+  data.begin("varSafe", ReadWrite);
   resetCount = data.getUInt("resetCount", 0);
   resetCount++;                                                                          // Neustart zählen
   data.putUInt("resetCount", resetCount);
+  data.end();
 }
 
 
@@ -1979,8 +1982,8 @@ void setup() {
     data.putBool("state", true); // Erststart-Flag dauerhaft setzen
     writeNVR();
   }
-  bumpResetCount();                                                                      // 9v14: Reset-Zähler als separater Schritt
   data.end();
+  // bumpResetCount() folgt bewusst erst nach loadWifiCredentials() – siehe dort.
 
   // ── webLogMutex früh initialisieren: setup()-Meldungen puffern ─
   webLogMutex = xSemaphoreCreateMutex();
@@ -2000,6 +2003,10 @@ void setup() {
     Serial.println("[WiFi-Config] Keine Zugangsdaten – starte Konfigurator");
     runWifiConfigServer();   // kehrt nicht zurück (ESP.restart am Ende)
   }
+  // 11v03: erst JETZT zählen – der Konfigurator-Boot nach Werksreset (NVS leer,
+  // loadWifiCredentials() false → ESP.restart in runWifiConfigServer) wird damit
+  // übersprungen. Der nachfolgende reguläre Boot landet sauber auf resetCount=1.
+  bumpResetCount();
   webLogf("[WiFi] Credentials geladen: SSID=%s", sta_ssid);
 
   // ── NTP ──────────────────────────────────────────────────
@@ -2176,7 +2183,7 @@ void setup() {
   // Timeout WDT_HARDWARE_MS kürzer als Software-Watchdog WDG_TIMEOUT_MS:
   // Hardware greift bei echtem CPU-Lock, Software bei logischem Freeze.
   const esp_task_wdt_config_t twdt_cfg = {
-    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_11v02.h
+    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_11v03.h
     .idle_core_mask = 0,               // Idle-Tasks nicht überwachen
     .trigger_panic  = true,            // Backtrace + Reset bei Ablauf
   };

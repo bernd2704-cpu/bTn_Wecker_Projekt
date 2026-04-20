@@ -1,10 +1,16 @@
 #pragma once
-// SysConf_11v02.h – Konfigurationskonstanten für bTn Wecker
-// Firmware-Version : 11v02
-// Datei-Version    : 11v02
+// SysConf_11v03.h – Konfigurationskonstanten für bTn Wecker
+// Firmware-Version : 11v03
+// Datei-Version    : 11v03
 // Boardverwalter   : esp32 3.3.8 von Espressif Systems
 //
 // Änderungshistorie:
+//   11v03–resetCount zählt WiFi-Konfigurator-Boot nicht mehr mit:
+//         bumpResetCount() in setup() wird erst NACH loadWifiCredentials()
+//         aufgerufen. Nach einem Werksreset zeigte der Reset-Zähler 2 an,
+//         weil der erste Boot (leere NVS → WiFi-Konfigurator → ESP.restart)
+//         und der zweite Boot (mit gespeicherten WLAN-Daten) beide zählten.
+//         Jetzt zählt nur der reguläre Boot.
 //   11v02–Sicherheit Info-Seite + Display-Wake:
 //         (1) S3 verhält sich bei ausgeschaltetem Display jetzt analog
 //             zu T0–T4: weckt das Display und verwirft das Event,
@@ -117,7 +123,7 @@
 //          Stack-Größen als Kommentar dokumentiert
 
 // ── Firmware-Version ─────────────────────────────────────────
-#define FW_VERSION "11v02"                                                     // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
+#define FW_VERSION "11v03"                                                     // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
 
 // ── WiFi ─────────────────────────────────────────────────────
 // STA_SSID / STA_PSK werden nicht mehr direkt genutzt.

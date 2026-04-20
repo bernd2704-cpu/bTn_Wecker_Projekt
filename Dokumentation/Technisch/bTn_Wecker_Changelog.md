@@ -135,4 +135,10 @@ Basis 4v1  →  11v01
 |---|---|---|
 | 11v01 | Funktion | Web-Log: neue Rubrik „Status – Letzter Start" zeigt die Zeilen WiFi und NTP analog zur Info-Seite (datum_WiFi/zeit_WiFi, datum_sync/zeit_sync); platziert oberhalb der Touch-Baseline-Sektion |
 
-bTn Wecker  ·  Änderungshistorie  ·  Stand 11v01
+## Version 11v03
+
+| Version | Kategorie | Änderung |
+|---|---|---|
+| 11v03 | Bugfix | resetCount zeigte nach Werksreset 2 statt 1: `bumpResetCount()` in `setup()` wurde vor `loadWifiCredentials()` aufgerufen – Konfigurator-Boot nach NVS-Erase zählte ebenfalls mit. Aufruf jetzt hinter `loadWifiCredentials()`; `bumpResetCount()` öffnet NVR-Namespace selbst (begin/end). |
+
+bTn Wecker  ·  Änderungshistorie  ·  Stand 11v03

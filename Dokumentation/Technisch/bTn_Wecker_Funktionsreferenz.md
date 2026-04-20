@@ -32,7 +32,7 @@ Zwei-Stufen-Debouncing: ISR-Ebene BTN_DEBOUNCE_MS=30ms, Task-Ebene BTN_LOCKOUT_M
 
 | Funktion / Task | Kategorie | Aufgabe |
 |---|---|---|
-| runAlarmMachine()<br>sec,min,hour | State Machine | ALARM_IDLE/ALARM_RUNNING. IDLE: prüft Alarm 1+2 (Minuten-Sperre, Alarm 1 Vorrang). RUNNING: pollt DFPlayer alle ALARM_POLL_MS (5s). Bei playerStatus<1: Ausgänge aus, ALARM_IDLE. |
+| runAlarmMachine()<br>sec,min,hour | State Machine | ALARM_IDLE/ALARM_RUNNING. IDLE: prüft Alarm 1+2 (Minuten-Sperre, Alarm 1 Vorrang). RUNNING: pollt DFPlayer alle ALARM_POLL_MS (5s). Bei playerStatus==0 (MP3 beendet): Ausgänge aus, ALARM_IDLE. playerStatus==-1 (UART-Timeout) hält den Alarm aktiv – siehe 9v4-Bugfix. |
 | runCuckooMachine()<br>sec,min,hour | State Machine | CUCKOO_IDLE/CUCKOO_RUNNING. IDLE: min==0, sec==0, cuckoo_on, Zeitfenster OK, !alarmThisHour, min≠lastCuckooMin → E1 HIGH. RUNNING: nach CUCKOO_DURATION_MS (7,5s) → E1 LOW, CUCKOO_IDLE. |
 | uiDispatch()<br>s, evt | State Machine | UI-Haupt-Dispatcher. Behandelt T0 (Seitenzyklus) und S3 (Info-Toggle) global, delegiert Rest an State-Handler. |
 | uiTransition()<br>next | State Machine | Führt Zustandswechsel durch: uiState=next, pageselect=next, menu(next). Muss unter displayMutex aufgerufen werden. |

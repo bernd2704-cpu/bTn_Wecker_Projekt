@@ -1,6 +1,6 @@
 # bTn Wecker – Funktions- und Task-Referenz
 
-*Firmware 11v01 · ESP32 / FreeRTOS*
+*Firmware 11v03 · ESP32 / FreeRTOS*
 
 ## 1. FreeRTOS Tasks
 
@@ -82,7 +82,7 @@ Zwei-Stufen-Debouncing: ISR-Ebene BTN_DEBOUNCE_MS=30ms, Task-Ebene BTN_LOCKOUT_M
 |---|---|---|
 | writeNVR() | NVS | Schreibt alle Einstellungen in NVS-Namespace "varSafe". |
 | readNVR() | NVS | Liest NVS, klemmt alle Werte auf gültige Bereiche. Hat ab 9v14 keine Seiteneffekte mehr (resetCount nicht mehr hier inkrementiert). |
-| bumpResetCount() | NVS | Liest resetCount aus NVS, inkrementiert und schreibt zurück. Aus readNVR() ausgelagert (9v14) – klare Trennung: readNVR() liest nur, bumpResetCount() schreibt nur den Zähler. |
+| bumpResetCount() | NVS | Liest resetCount aus NVS, inkrementiert und schreibt zurück. Aus readNVR() ausgelagert (9v14). Ab 11v03 öffnet die Funktion den NVR-Namespace "varSafe" selbst (begin/end) und wird in setup() erst NACH loadWifiCredentials() aufgerufen – so wird der Konfigurator-Boot nach Werksreset nicht mitgezählt. |
 | loadWifiCredentials() | WiFi | Liest SSID/PSK aus "wifiCfg", gibt true bei gültigem Eintrag zurück. |
 | clearWifiCredentials() | WiFi | Setzt valid-Flag in "wifiCfg" auf false → Konfigurator beim nächsten Start. |
 | runWifiConfigServer() | WiFi | Blockierend (vor Task-Start). AP "bTn-Wecker", HTTP Port 80, GET/POST, ESP.restart() nach Speichern. |
@@ -96,4 +96,4 @@ Zwei-Stufen-Debouncing: ISR-Ebene BTN_DEBOUNCE_MS=30ms, Task-Ebene BTN_LOCKOUT_M
 
 ---
 
-*bTn Wecker · Funktionsreferenz · Firmware 11v01*
+*bTn Wecker · Funktionsreferenz · Firmware 11v03*

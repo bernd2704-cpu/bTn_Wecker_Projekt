@@ -1,10 +1,16 @@
 #pragma once
-// SysConf_11v03.h – Konfigurationskonstanten für bTn Wecker
-// Firmware-Version : 11v03
-// Datei-Version    : 11v03
+// SysConf_11v04.h – Konfigurationskonstanten für bTn Wecker
+// Firmware-Version : 11v04
+// Datei-Version    : 11v04
 // Boardverwalter   : esp32 3.3.8 von Espressif Systems
 //
 // Änderungshistorie:
+//   11v04–S3 bei dunklem Display: Display einschalten UND Info-Seite öffnen.
+//         Ändert das 11v02-Verhalten (reines Wake+Discard) zurück zu einem
+//         kombinierten Wake+Open. Touch T0–T4 bleiben reines Wake+Discard –
+//         nur S3 reicht das Event an die UI weiter. Da Auto-Return (20 s)
+//         immer UI_CLOCK erreicht, bevor der Display-Timeout (5 min) greift,
+//         landet die Toggle-Logik in uiDispatch() sicher auf UI_INFO.
 //   11v03–resetCount zählt WiFi-Konfigurator-Boot nicht mehr mit:
 //         bumpResetCount() in setup() wird erst NACH loadWifiCredentials()
 //         aufgerufen. Nach einem Werksreset zeigte der Reset-Zähler 2 an,
@@ -123,7 +129,7 @@
 //          Stack-Größen als Kommentar dokumentiert
 
 // ── Firmware-Version ─────────────────────────────────────────
-#define FW_VERSION "11v03"                                                     // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
+#define FW_VERSION "11v04"                                                     // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
 
 // ── WiFi ─────────────────────────────────────────────────────
 // STA_SSID / STA_PSK werden nicht mehr direkt genutzt.

@@ -1,6 +1,6 @@
 # bTn Wecker – Funktions- und Task-Referenz
 
-*Firmware 11v03 · ESP32 / FreeRTOS*
+*Firmware 11v04 · ESP32 / FreeRTOS*
 
 ## 1. FreeRTOS Tasks
 
@@ -15,7 +15,7 @@
 | stackMonTask<br>Core 0 · Pri 1<br>Stack 3072 | Task | Aktualisiert alle STACK_MON_INTERVAL_MS (60 s) den Stack-HWM-Snapshot (snapStackBuf/snapStackTime) via updateSnapStack(): alle 9 Tasks + freier Heap. Wird auf der Web-Log-Seite als dedizierte Sektion angezeigt. |
 | watchdogTask<br>Core 0 · Pri 1<br>Stack 1536 | Task | Software-Watchdog: prüft alle WDG_CHECK_MS (5s) ob wdg_inputTask/displayTask/alarmTask innerhalb WDG_TIMEOUT_MS (30s) aktualisiert wurden. Bei Freeze: webLog + OLED-Meldung + ESP.restart(). |
 | webLogTask<br>Core 0 · Pri 1<br>Stack 4096 | Task | HTTP-Log-Server auf Port WEBLOG_PORT (8080). Wartet auf WiFi, dann: GET / → HTML-Seite mit Auto-Refresh alle 20 s und farbiger Darstellung (grün/rot/gelb). GET /log → plain text. Ring-Puffer WEBLOG_LINES × WEBLOG_LINE_LEN (Allg. Log, Titel zeigt letzten NTP-Sync, 9v8) + Snapshot-Sektionen Touch-Baseline und Stack-HWM. |
-| inputTask<br>Core 1 · Pri 2<br>Stack 2560 | Task | Konsumiert inputQueue (50 ms-Timeout). S1/S2 ohne displayMutex. Alle anderen Events: displayMutex → uiDispatch() → uiTransition(). safeChange + safeChangeMs: nvrSemaphore erst nach NVR_COMMIT_DELAY_MS (2 s) Ruhezeit ohne weiteres Event freigeben (11v00). Touch-Wake wenn displayBlanked. Setzt wdg_inputTask + esp_task_wdt_reset(). |
+| inputTask<br>Core 1 · Pri 2<br>Stack 2560 | Task | Konsumiert inputQueue (50 ms-Timeout). S1/S2 ohne displayMutex. Alle anderen Events: displayMutex → uiDispatch() → uiTransition(). safeChange + safeChangeMs: nvrSemaphore erst nach NVR_COMMIT_DELAY_MS (2 s) Ruhezeit ohne weiteres Event freigeben (11v00). Display-Wake bei displayBlanked: T0–T4 wecken und verwerfen, S3 weckt und reicht das Event weiter → Info-Seite (11v04). Setzt wdg_inputTask + esp_task_wdt_reset(). |
 | displayTask<br>Core 1 · Pri 1<br>Stack 2560 | Task | Aktualisiert OLED alle DISPLAY_UPDATE_MS (300 ms) unter displayMutex. Überträgt NTP/WiFi-Double-Buffer. Auto-Rückkehr zu UI_CLOCK nach AUTO_RETURN_MS (20 s). Schaltet OLED ab nach DISPLAY_TIMEOUT_MS (5 min) ohne Touch (10v00/10v02). Setzt wdg_displayTask + esp_task_wdt_reset(). |
 
 ## 2. Interrupt Service Routinen
@@ -96,4 +96,4 @@ Zwei-Stufen-Debouncing: ISR-Ebene BTN_DEBOUNCE_MS=30ms, Task-Ebene BTN_LOCKOUT_M
 
 ---
 
-*bTn Wecker · Funktionsreferenz · Firmware 11v03*
+*bTn Wecker · Funktionsreferenz · Firmware 11v04*

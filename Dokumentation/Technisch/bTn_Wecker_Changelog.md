@@ -141,4 +141,10 @@ Basis 4v1  →  11v01
 |---|---|---|
 | 11v03 | Bugfix | resetCount zeigte nach Werksreset 2 statt 1: `bumpResetCount()` in `setup()` wurde vor `loadWifiCredentials()` aufgerufen – Konfigurator-Boot nach NVS-Erase zählte ebenfalls mit. Aufruf jetzt hinter `loadWifiCredentials()`; `bumpResetCount()` öffnet NVR-Namespace selbst (begin/end). |
 
-bTn Wecker  ·  Änderungshistorie  ·  Stand 11v03
+## Version 11v04
+
+| Version | Kategorie | Änderung |
+|---|---|---|
+| 11v04 | Funktion | S3 bei dunklem Display: Display einschalten UND Info-Seite öffnen (vorher seit 11v02 reines Wake+Discard). Implementiert in `inputTask` – Wake-Pfad für EVT_S3 setzt kein `continue`, Event fließt weiter zu `uiDispatch()`. Auto-Return (20 s) garantiert deterministisches Landen auf UI_INFO. Touch T0–T4 bleiben Wake+Discard (Reset-Schutz). |
+
+bTn Wecker  ·  Änderungshistorie  ·  Stand 11v04

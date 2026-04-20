@@ -1,6 +1,6 @@
 # bTn Wecker – Bedienungsanleitung
 
-*Firmware 11v03 · ESP32 / FreeRTOS*
+*Firmware 11v04 · ESP32 / FreeRTOS*
 
 ## 1. Übersicht
 
@@ -26,13 +26,13 @@ Der bTn Wecker ist ein ESP32-basierter Wecker mit OLED-Anzeige, MP3-Wiedergabe (
 | T4  (Touch) | Wert erhöhen: Minute +, Bis-Zeit +<br>Hold: Dauerwiederholung  ·  Seite 0: Lautstärke – |
 | S1  (Taster) | Laufenden Alarm oder Sound stoppen<br>wenn kein Alarm: Kuckuck einmalig auslösen |
 | S2  (Taster) | Zugschalter: Licht (E3) und Mühlrad (E2) gleichzeitig Ein/Aus toggeln |
-| S3  (Taster) | Info-Seite ein-/ausblenden (von jeder Seite aus erreichbar)<br>Bei ausgeschaltetem Display weckt S3 nur das Display – die Info-Seite wird **nicht** zusätzlich geöffnet (Schutz vor ungewolltem Reset, 11v02) |
+| S3  (Taster) | Info-Seite ein-/ausblenden (von jeder Seite aus erreichbar)<br>Bei ausgeschaltetem Display weckt S3 das Display und öffnet die Info-Seite (11v04) |
 
 **Hold-Funktion:**  Touch-Felder T3 und T4 unterstützen Dauerberührung. Nach 750 ms wechselt das Feld in den Repeat-Modus und sendet alle 250 ms einen weiteren Impuls – nützlich für schnelles Einstellen von Stunden und Minuten.
 
 ## 3. Menüstruktur
 
-T0 wechselt die Seiten 0–6 zyklisch. S3 öffnet jederzeit die Info-Seite (Seite 7). Nach 20 Sekunden ohne Eingabe kehrt das Gerät automatisch zu Seite 0 zurück – auch von der Info-Seite. Nach weiteren 5 Minuten ohne Touch-Eingabe schaltet das OLED-Display ab; eine Berührung eines beliebigen Touch-Felds oder ein Druck auf S3 schaltet es wieder ein (das auslösende Event wird dabei verworfen).
+T0 wechselt die Seiten 0–6 zyklisch. S3 öffnet jederzeit die Info-Seite (Seite 7). Nach 20 Sekunden ohne Eingabe kehrt das Gerät automatisch zu Seite 0 zurück – auch von der Info-Seite. Nach weiteren 5 Minuten ohne Touch-Eingabe schaltet das OLED-Display ab; eine Berührung eines Touch-Felds (T0–T4) weckt das Display und verwirft das Event, während S3 das Display weckt und direkt die Info-Seite öffnet (11v04).
 
 | Seite | Name | Inhalt |
 |---|---|---|
@@ -93,7 +93,7 @@ Die Info-Seite zeigt Systemdaten und bietet Zugang zu Konfigurations- und Reset-
 | MP3 *nnn*   RESET *nnnn* | Anzahl gefundener MP3-Dateien  ·  Neustart-Zähler (4-stellig) |
 | IP:8080 | Adresse des Web-Log-Servers – im Browser öffnen für Diagnoseinformationen |
 
-**Sicherheit:**  Ist das Display ausgeschaltet, wecken S3 und die Touch-Felder nur das Display; das auslösende Event wird verworfen. So kann ein blind gedrückter Taster auf der aktiven Info-Seite nicht versehentlich T0 (WLAN-Reset) oder T4 (Werksreset) auslösen.
+**Sicherheit:**  Ist das Display ausgeschaltet, wecken die Touch-Felder T0–T4 nur das Display – das auslösende Event wird verworfen. So kann ein blind getippter Touch auf der Info-Seite nicht versehentlich T0 (WLAN-Reset) oder T4 (Werksreset) auslösen. S3 weckt das Display und öffnet die Info-Seite direkt (11v04); die Auto-Rückkehr nach 20 s Inaktivität stellt sicher, dass das Display nur von Seite 0 aus abschaltet, der S3-Aufruf also reproduzierbar zur Info-Seite führt.
 
 ## 8. Web-Log (http://IP:8080)
 
@@ -135,4 +135,4 @@ Info-Seite (S3) öffnen → T4 drücken. Alle gespeicherten Einstellungen (Alarm
 
 ---
 
-*bTn Wecker  ·  Bedienungsanleitung  ·  Firmware 11v03*
+*bTn Wecker  ·  Bedienungsanleitung  ·  Firmware 11v04*

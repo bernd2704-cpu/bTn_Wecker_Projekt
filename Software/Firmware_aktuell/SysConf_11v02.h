@@ -13,7 +13,7 @@
 //             Taster bzw. anschließender Touch versehentlich T0 (WLAN-
 //             Reset) oder T4 (Werksreset) auslöst.
 //         (2) Info-Seite zeigt die gefährlichen Aktionen explizit:
-//             Zeilen "T0: WLAN RESET SSID PW" und "T4: WERKSRESET"
+//             Zeilen "T0: RESET SSID PW" und "T4: WERKSRESET"
 //             ersetzen die dort zuvor duplizierten WiFi-/NTP-Zeiten.
 //         (3) Web-Log: Rubrik "Status – Letzter Start" umbenannt in
 //             "Verbindung – letzter WiFi Reconnect / NTP Sync" und

@@ -600,7 +600,7 @@ void menu(uint8_t page) {   // uint8_t: Koordinatenbereich 0–7 entspricht UiSt
     case 7:
       display.clear();
       zeigeZ10C(63, 0, PGMInfo);
-      zeigeZ10L(1,  16, "T0:  WLAN RESET SSID PW");
+      zeigeZ10L(1,  16, "T0:  RESET SSID PW");
       zeigeZ10L(1,  28, "T4:  WERKSRESET");
       zeigeZ10L(1,  40, "MP3");
       zeigeZ10L(28, 40, str_mp3);

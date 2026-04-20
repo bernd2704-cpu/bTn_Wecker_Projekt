@@ -1,10 +1,14 @@
 #pragma once
-// SysConf_11v00.h – Konfigurationskonstanten für bTn Wecker
-// Firmware-Version : 11v00
-// Datei-Version    : 11v00
+// SysConf_11v01.h – Konfigurationskonstanten für bTn Wecker
+// Firmware-Version : 11v01
+// Datei-Version    : 11v01
 // Boardverwalter   : esp32 3.3.8 von Espressif Systems
 //
 // Änderungshistorie:
+//   11v01–Web-Log: neue Rubrik "Status – Letzter Start" zeigt die
+//          Zeilen WiFi und NTP analog zur Info-Seite (datum_WiFi/
+//          zeit_WiFi, datum_sync/zeit_sync); platziert oberhalb der
+//          Touch-Baseline-Sektion.
 //   11v00–Review-Fixes:
 //         (1) NVR-Flash-Wear: nvrSemaphore-Release erst NACH Ruhezeit
 //             NVR_COMMIT_DELAY_MS (2 s) ohne neues Event – verhindert
@@ -100,7 +104,7 @@
 //          Stack-Größen als Kommentar dokumentiert
 
 // ── Firmware-Version ─────────────────────────────────────────
-#define FW_VERSION "11v00"                                                     // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
+#define FW_VERSION "11v01"                                                     // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
 
 // ── WiFi ─────────────────────────────────────────────────────
 // STA_SSID / STA_PSK werden nicht mehr direkt genutzt.

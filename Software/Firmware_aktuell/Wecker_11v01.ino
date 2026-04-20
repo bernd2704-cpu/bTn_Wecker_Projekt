@@ -59,7 +59,7 @@
 #include <esp_task_wdt.h>             // ESP32 Hardware Task Watchdog Timer (TWDT)
 
 // ── Konfiguration ────────────────────────────────────────────
-#include "SysConf_11v00.h"                                                               // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
+#include "SysConf_11v01.h"                                                               // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
 #include "WEB.h"
 
 const char PGMInfo[] = "bTn_Wecker_" FW_VERSION;                                          // PROGMEM-fähig; kein String-Heap-Fragment
@@ -1844,6 +1844,20 @@ static void webLogTask(void *pvParam) {
       "<h3>IP: " + ip + ":" + String(WEBLOG_PORT) + " &nbsp;|&nbsp; Auto-Refresh: 20 s"
       " &nbsp;|&nbsp; Aktualisiert: <span id='upd'></span></h3>";
 
+    // ── Status: Letzter Start (WiFi + NTP analog Info-Seite) ─
+    {
+      String wDate = strlen(datum_WiFi) > 0 ? String(datum_WiFi) : String("–");
+      String wTime = strlen(zeit_WiFi)  > 0 ? String(zeit_WiFi)  : String("–");
+      String nDate = strlen(datum_sync) > 0 ? String(datum_sync) : String("–");
+      String nTime = strlen(zeit_sync)  > 0 ? String(zeit_sync)  : String("–");
+      html += "<div class='snap-wrap'>"
+              "<div class='snap-title'>Status &ndash; Letzter Start</div>"
+              "<div class='snap-box'>"
+              "  WiFi  " + wDate + "  " + wTime + "\n"
+              "  NTP   " + nDate + "  " + nTime +
+              "</div></div>";
+    }
+
     // ── Ring-Puffer ──────────────────────────────────────────
     {
       String ntpTs = strlen(snapNtpTime) > 0 ? String(snapNtpTime) : String("–");
@@ -2161,7 +2175,7 @@ void setup() {
   // Timeout WDT_HARDWARE_MS kürzer als Software-Watchdog WDG_TIMEOUT_MS:
   // Hardware greift bei echtem CPU-Lock, Software bei logischem Freeze.
   const esp_task_wdt_config_t twdt_cfg = {
-    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_11v00.h
+    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_11v01.h
     .idle_core_mask = 0,               // Idle-Tasks nicht überwachen
     .trigger_panic  = true,            // Backtrace + Reset bei Ablauf
   };

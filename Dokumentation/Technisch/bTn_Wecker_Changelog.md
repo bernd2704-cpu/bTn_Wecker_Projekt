@@ -2,7 +2,7 @@
 
 Änderungshistorie
 
-Basis 4v1  →  11v00
+Basis 4v1  →  11v01
 
 ## Kategorien
 
@@ -129,4 +129,10 @@ Basis 4v1  →  11v00
 | 11v00 | Bugfix | wifiTask Double-Buffer Race: snprintf in datum_WiFi_tmp/zeit_WiFi_tmp nur wenn kein altes Paar pending (wifiSyncPending-Guard); schließt Torn-Read-Fenster gegen displayTask |
 | 11v00 | Qualität | Log-Regel: Serial.printf mit Web-Log-URL bleibt bewusst nach WiFi-Connect im Serial-Monitor – die URL steht sonst nur im Web-Log selbst und wäre unerreichbar |
 
-bTn Wecker  ·  Änderungshistorie  ·  Stand 11v00
+## Version 11v01
+
+| Version | Kategorie | Änderung |
+|---|---|---|
+| 11v01 | Funktion | Web-Log: neue Rubrik „Status – Letzter Start" zeigt die Zeilen WiFi und NTP analog zur Info-Seite (datum_WiFi/zeit_WiFi, datum_sync/zeit_sync); platziert oberhalb der Touch-Baseline-Sektion |
+
+bTn Wecker  ·  Änderungshistorie  ·  Stand 11v01

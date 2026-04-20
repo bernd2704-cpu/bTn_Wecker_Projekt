@@ -6,7 +6,7 @@ DFPlayer Mini (Serial2, RX=16, TX=17), Touch T0=GPIO4/T2=GPIO2/T3=GPIO15/T4=GPIO
 Taster S1=GPIO32/S2=GPIO33/S3=GPIO0, Ausgänge E1=GPIO25/E2=GPIO26/E3=GPIO27
 
 ## Aktuelle Version
-Firmware 11v00, Konfiguration SysConf_11v00.h
+Firmware 11v01, Konfiguration SysConf_11v01.h
 
 ## Architektur
 FreeRTOS, 9 Tasks auf 2 Cores, Arduino IDE / ESP32 Core 3.3.8

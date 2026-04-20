@@ -32,7 +32,7 @@ Der bTn Wecker ist ein ESP32-basierter Wecker mit OLED-Anzeige, MP3-Wiedergabe (
 
 ## 3. Menüstruktur
 
-T0 wechselt die Seiten 0–6 zyklisch. S3 öffnet jederzeit die Info-Seite (Seite 7). Nach 20 Sekunden ohne Eingabe kehrt das Gerät automatisch zu Seite 0 zurück – auch von der Info-Seite. Nach weiteren 5 Minuten ohne Touch-Eingabe schaltet das OLED-Display ab; eine Berührung eines Touch-Felds (T0–T4) weckt das Display und verwirft das Event, während S3 das Display weckt und direkt die Info-Seite öffnet (11v04).
+T0 wechselt die Seiten 0–6 zyklisch. S3 öffnet jederzeit die Info-Seite (Seite 7). Nach 20 Sekunden ohne Eingabe kehrt das Gerät automatisch zu Seite 0 zurück – auch von der Info-Seite. Nach 5 Minuten ohne Touch-Eingabe schaltet das OLED-Display ab; eine Berührung eines Touch-Felds (T0–T4) weckt das Display und verwirft das Event, während S3 das Display weckt und direkt die Info-Seite öffnet (11v04).
 
 | Seite | Name | Inhalt |
 |---|---|---|

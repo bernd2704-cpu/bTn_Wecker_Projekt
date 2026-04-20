@@ -87,7 +87,7 @@ Die Info-Seite zeigt Systemdaten und bietet Zugang zu Konfigurations- und Reset-
 
 | Zeile | Inhalt |
 |---|---|
-| Kopfzeile | Firmware-Kennung (z.B. `bTn_Wecker_11v03`) |
+| Kopfzeile | Firmware-Kennung (z.B. `bTn_Wecker_11v04`) |
 | T0: RESET SSID PW | Hinweis: T0 drücken löscht die WLAN-Zugangsdaten und startet den Konfigurator |
 | T4: WERKSRESET | Hinweis: T4 drücken löscht alle Einstellungen (NVS-Erase) und startet neu |
 | MP3 *nnn*   RESET *nnnn* | Anzahl gefundener MP3-Dateien  ·  Neustart-Zähler (4-stellig) |
@@ -108,7 +108,7 @@ Nach der WiFi-Verbindung ist ein Diagnose-Server erreichbar. Die IP-Adresse wird
 
 | Sektion | Inhalt |
 |---|---|
-| Allg. Log | Ring-Puffer mit Systemereignissen (Start, WiFi/NTP-Events, Watchdog, Alarme). Titel zeigt letzten NTP-Sync. |
+| Allg. Log | Ring-Puffer mit Systemereignissen (Start, WiFi/NTP-Events, Watchdog, Alarme). Titel lautet „Allgemeines Log – letzter Reset: *&lt;NTP-Zeitstempel&gt;*" (Zeitpunkt des ersten NTP-Syncs nach dem Reset). |
 | Verbindung – letzter WiFi Reconnect / NTP Sync | Zeigt die Zeitstempel der letzten WiFi-Verbindung und der letzten NTP-Synchronisation (11v02: umbenannt von „Status – Letzter Start" und unter den Ring-Puffer verschoben). |
 | Touch-Baseline | Letzter Messwert und Schwellwert aller vier Touch-Pads |
 | Stack High-Water Marks | Speicherauslastung aller 9 Tasks + freier Heap |

@@ -2,7 +2,7 @@
 
 Änderungshistorie
 
-Basis 4v1  →  11v01
+Basis 4v1  →  11v04
 
 ## Kategorien
 
@@ -134,6 +134,15 @@ Basis 4v1  →  11v01
 | Version | Kategorie | Änderung |
 |---|---|---|
 | 11v01 | Funktion | Web-Log: neue Rubrik „Status – Letzter Start" zeigt die Zeilen WiFi und NTP analog zur Info-Seite (datum_WiFi/zeit_WiFi, datum_sync/zeit_sync); platziert oberhalb der Touch-Baseline-Sektion |
+
+## Version 11v02
+
+| Version | Kategorie | Änderung |
+|---|---|---|
+| 11v02 | Stabilität | inputTask: S3 wird bei `displayBlanked` zum reinen Wake+Discard-Event (analog T0–T4). Verhindert, dass ein blind gedrückter Taster auf der dunklen Info-Seite den Info-Toggle oder nachfolgende T0/T4-Touches (WLAN-Reset / Werksreset) versehentlich auslöst |
+| 11v02 | Funktion | UI_INFO: WiFi-/NTP-Zeilen entfernt, stattdessen explizite Warnhinweise „T0: WLAN RESET SSID PW" und „T4: WERKSRESET" angezeigt – gefährliche Aktionen werden dem Nutzer direkt benannt |
+| 11v02 | Funktion | Web-Log: Rubrik „Status – Letzter Start" umbenannt in „Verbindung – letzter WiFi Reconnect / NTP Sync" und unter die Ring-Puffer-Sektion verschoben |
+| 11v02 | Qualität | UI_INFO-Zeile T0 von „WLAN RESET SSID PW" auf „RESET SSID PW" gekürzt (besserer Zeilenfit auf 128 px OLED) |
 
 ## Version 11v03
 

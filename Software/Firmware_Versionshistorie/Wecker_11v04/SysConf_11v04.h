@@ -1,10 +1,120 @@
 #pragma once
-// SysConf_9v6.h – Konfigurationskonstanten für bTn Wecker
-// Firmware-Version : 9v6
-// Datei-Version    : 9v6
-// Boardverwalter   : esp32 3.3.7 von Espressif Systems
+// SysConf_11v04.h – Konfigurationskonstanten für bTn Wecker
+// Firmware-Version : 11v04
+// Datei-Version    : 11v04
+// Boardverwalter   : esp32 3.3.8 von Espressif Systems
 //
 // Änderungshistorie:
+//   11v04–S3 bei dunklem Display: Display einschalten UND Info-Seite öffnen.
+//         Ändert das 11v02-Verhalten (reines Wake+Discard) zurück zu einem
+//         kombinierten Wake+Open. Touch T0–T4 bleiben reines Wake+Discard –
+//         nur S3 reicht das Event an die UI weiter. Da Auto-Return (20 s)
+//         immer UI_CLOCK erreicht, bevor der Display-Timeout (5 min) greift,
+//         landet die Toggle-Logik in uiDispatch() sicher auf UI_INFO.
+//   11v03–resetCount zählt WiFi-Konfigurator-Boot nicht mehr mit:
+//         bumpResetCount() in setup() wird erst NACH loadWifiCredentials()
+//         aufgerufen. Nach einem Werksreset zeigte der Reset-Zähler 2 an,
+//         weil der erste Boot (leere NVS → WiFi-Konfigurator → ESP.restart)
+//         und der zweite Boot (mit gespeicherten WLAN-Daten) beide zählten.
+//         Jetzt zählt nur der reguläre Boot.
+//   11v02–Sicherheit Info-Seite + Display-Wake:
+//         (1) S3 verhält sich bei ausgeschaltetem Display jetzt analog
+//             zu T0–T4: weckt das Display und verwirft das Event,
+//             statt den Info-Toggle durchzureichen. Verhindert, dass
+//             bei aktiver UI_INFO ohne Anzeige ein blind gedrückter
+//             Taster bzw. anschließender Touch versehentlich T0 (WLAN-
+//             Reset) oder T4 (Werksreset) auslöst.
+//         (2) Info-Seite zeigt die gefährlichen Aktionen explizit:
+//             Zeilen "T0: RESET SSID PW" und "T4: WERKSRESET"
+//             ersetzen die dort zuvor duplizierten WiFi-/NTP-Zeiten.
+//         (3) Web-Log: Rubrik "Status – Letzter Start" umbenannt in
+//             "Verbindung – letzter WiFi Reconnect / NTP Sync" und
+//             unter die Ring-Puffer-Sektion verschoben.
+//   11v01–Web-Log: neue Rubrik "Status – Letzter Start" zeigt die
+//          Zeilen WiFi und NTP analog zur Info-Seite (datum_WiFi/
+//          zeit_WiFi, datum_sync/zeit_sync); platziert oberhalb der
+//          Touch-Baseline-Sektion.
+//   11v00–Review-Fixes:
+//         (1) NVR-Flash-Wear: nvrSemaphore-Release erst NACH Ruhezeit
+//             NVR_COMMIT_DELAY_MS (2 s) ohne neues Event – verhindert
+//             Flash-Writes bei gehaltener Einstelltaste im Touch-REPEAT.
+//         (2) wifiTask Double-Buffer Race: snprintf nur wenn kein altes
+//             Paar mehr pending ist (wifiSyncPending-Guard) – schließt
+//             Torn-Read-Fenster gegen displayTask.
+//         (3) Review-Vorschlag zur Log-Regel (Serial.printf nach
+//             WiFi-Connect durch webLogf ersetzen) bewusst NICHT
+//             übernommen: die Web-Log-URL muss im Serial-Monitor
+//             erscheinen, sonst ist das Web-Log unerreichbar
+//             (Adresse steht ja erst im Web-Log selbst).
+//   10v06–wakeDisplay(): TOCTOU + Race auf lastTouchMs behoben (displayBlanked-Check
+//         und lastTouchMs=millis() jetzt atomar unter displayMutex);
+//         lastTouchMs als volatile deklariert (Cross-Core-Sichtbarkeit Core0→Core1)
+//   10v05–DFPlayer TX-Pin (GPIO17) vor Serial2.begin() 3s LOW halten
+//   10v04–Web-Log: Zeile "[Reset] Anzahl: N" → "[RESET] resetCount: N"
+//   10v03–Display wird bei Alarm-Start automatisch eingeschaltet (analog
+//          Touch-Wake); Helper wakeDisplay() in alarmTask
+//   10v02–Display-Ein-Zeit DISPLAY_TIMEOUT_MS 10 min → 5 min
+//   10v01–DFPlayer-Init: 9v16-Retry-Logik zurückgenommen (player.begin()
+//          wieder als einmaliger Aufruf ohne Schleife); DFP_INIT_TIMEOUT_MS
+//          und DFP_INIT_RETRY_MS entfernt; SETUP_MP3_TIMEOUT_MS
+//          10000 → 5000 ms
+//   10v00–Display-Abschaltung nach 10 min ohne Touch (DISPLAY_TIMEOUT_MS);
+//          Berührung eines beliebigen Touchpads weckt Display erneut für
+//          10 min, das auslösende Touch-Event wird verworfen (andere
+//          Touch-Funktionen nur bei eingeschaltetem Display aktiv);
+//          Checkbox-Rahmen vereinfacht (nur äußerer 10x10 drawRect, keine
+//          inneren 8x8 drawRects mehr – schlankere Darstellung)
+//   9v18– UI: Checkboxen auf 10x10 vergrößert (2px Rahmen + 1px Abstand
+//          + 4x4 Check-Füllung); Checkboxen auf Seite Funktion um 2px
+//          nach links verschoben (x 34 → 32)
+//   9v17– UI: Checkbox-Rahmen von 1px auf 2px verdickt (zwei verschachtelte
+//          drawRect 8x8 und 6x6); alle Checkboxen um 1px nach oben verschoben
+//   9v16– DFPlayer-Kaltstart robuster: player.begin() in Retry-Schleife mit
+//          DFP_INIT_TIMEOUT_MS/DFP_INIT_RETRY_MS; SETUP_MP3_TIMEOUT_MS
+//          5000 → 10000 ms (SD-Indizierung nach Power-On dauert länger als
+//          nach Reset-Taste)
+//   9v15– UI: Checkboxen von 7x7 auf 8x8 vergrößert; Checked-Darstellung als
+//          Rahmen (drawRect 8x8) plus innerer Füllung (fillRect 6x6) gemäß
+//          neuer Icon-Vorlage
+//   9v14– Wartungsqualität (Kosmetik aus Code-Review):
+//          (1) resetCount++ aus readNVR() in bumpResetCount() ausgelagert –
+//              readNVR() hat keine Seiteneffekte mehr
+//          (2) t_sec_alt von file-scope in displayTask als static verschoben –
+//              signalisiert korrekt, dass nur displayTask zugreift
+//          (3) Task-Handles für stackMonTask und webLogTask ergänzt,
+//              updateSnapStack() zeigt jetzt auch deren Stack-HWM
+//   9v13– Mittlere Issues aus Code-Review behoben:
+//          (1) Race auf t_start4/lastCuckooMin zwischen inputTask und
+//              alarmTask dokumentiert – 32-bit-Writes auf Xtensa atomar,
+//              daher logisch harmlos; Kommentar im Code ergänzt
+//          (2) webLogTask "/"-Handler: html.reserve(8192) – verhindert
+//              inkrementelle String-Reallokationen → Heap-Fragmentierung
+//          (3) Mitternachts-Flackern: One-Shot-Flag midnightDrawn –
+//              nur ein einziger Full-Redraw um 00:00:00 statt ~6-7×
+//          (4) sound{1,2}_selected = 0 wenn mp3Count == 0 verhindert:
+//              Fallback auf 1 statt ungültige Dateinummer an DFPlayer
+//          (5) Alarm-Start ohne playerMutex: State nur wechseln wenn
+//              playFolder wirklich lief – kein stiller Alarm bei Mutex-
+//              Timeout, nächster alarmTask-Tick versucht es erneut
+//   9v12– Bugfixes aus Code-Review:
+//          (1) Race Condition auf globaler timeinfo/now behoben –
+//              timeavailable() nutzt lokale tm-Struktur (analog wifiTask)
+//          (2) datum_WiFi/zeit_WiFi ohne NTP-Sync: showTime() vor snprintf
+//              und nur füllen wenn wifiConnected – verhindert "19000101"
+//          (3) Dead Code ax_live entfernt (nie gelesen)
+//          (4) Kommentar-Referenz SysConf_9v6.h → SysConf_9v12.h korrigiert
+//   9v11– Stack-Vorgaben reduziert: wifiTask/nvrTask/inputTask/displayTask
+//          2560, watchdogTask 1536 (basierend auf High-Water-Mark-Messung)
+//   9v10– DFPlayer Start-Sound: readFileCounts() vor playFolder verschoben –
+//          Sound wird erst abgespielt wenn SD-Index aufgebaut ist; behebt
+//          Abbruch des Start-Sounds nach Power-On/Flash
+//   9v9 – Web-Log: Schriftgröße der Überschriften (h2, h3, .sec-title,
+//          .snap-title) auf 1rem / 1.6rem vergrößert
+//   9v8 – Web-Log Auto-Refresh 10 → 20 s; Reihenfolge: Allg. Log,
+//          Touch Baseline, Stack HWM; Allg. Log-Titel zeigt NTP-Sync-
+//          Zeitstempel des ersten Resets
+//   9v7 – Bugfix: EVT_S3 aktualisiert nun lastTouchMs – Auto-Rückkehr von
+//          UI_INFO startete sofort statt nach 20 s (S3 hat EVT-ID 6 > EVT_T4=3)
 //   9v6 – Feature: Auto-Rückkehr zu Seite 0 nach 20 s jetzt auch für
 //          Seite 7 (UI_INFO); UI_INFO-Ausnahme aus displayTask entfernt
 //   9v5 – Bugfix: esp_task_wdt_reconfigure() statt esp_task_wdt_init()
@@ -19,7 +129,7 @@
 //          Stack-Größen als Kommentar dokumentiert
 
 // ── Firmware-Version ─────────────────────────────────────────
-#define FW_VERSION "9v6"                                                       // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
+#define FW_VERSION "11v04"                                                     // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
 
 // ── WiFi ─────────────────────────────────────────────────────
 // STA_SSID / STA_PSK werden nicht mehr direkt genutzt.
@@ -74,8 +184,10 @@ const uint32_t BTN_DEBOUNCE_MS      =   30;                                    /
 const uint32_t BTN_LOCKOUT_MS       = 1000;                                    // Aktionssperre in inputTask: verhindert bewusste Doppeldrücke
 const uint32_t CUCKOO_DURATION_MS   = 7500;                                    // Kuckuck-Laufzeit
 const uint32_t AUTO_RETURN_MS       = 20000;                                   // Auto-Rückkehr zu Seite 0
+const uint32_t DISPLAY_TIMEOUT_MS   = 300000UL;                                // OLED aus nach 5 min ohne Touch-Event
 const uint32_t ALARM_POLL_MS        = 5000;                                    // Alarm-Nachlauf Prüfintervall
 const uint32_t WIFI_RECONNECT_MS    = 3000;                                    // WiFi-Reconnect Wiederholrate
+const uint32_t NVR_COMMIT_DELAY_MS  = 2000;                                    // 11v00: Ruhezeit nach letztem Event vor NVR-Commit (Flash-Wear-Schutz)
 
 // ── NVR-Zugriffsmodus ────────────────────────────────────────
 const bool ReadWrite = false;                                                  // Preferences: Lesen + Schreiben
@@ -96,12 +208,12 @@ const uint8_t E3 = 27;                                                         /
 // setup() verwendet diese Konstanten direkt – Änderungen hier wirken sofort.
 #define STACK_TOUCH     3072                                                   // touchTask
 #define STACK_ALARM     2048                                                   // alarmTask
-#define STACK_WIFI      3072                                                   // wifiTask
-#define STACK_NVR       3072                                                   // nvrTask
+#define STACK_WIFI      2560                                                   // wifiTask
+#define STACK_NVR       2560                                                   // nvrTask
 #define STACK_STACKMON  3072                                                   // stackMonTask
-#define STACK_WATCHDOG  2048                                                   // watchdogTask
-#define STACK_INPUT     3072                                                   // inputTask
-#define STACK_DISPLAY   3072                                                   // displayTask
+#define STACK_WATCHDOG  1536                                                   // watchdogTask
+#define STACK_INPUT     2560                                                   // inputTask
+#define STACK_DISPLAY   2560                                                   // displayTask
 #define STACK_WEBLOG    4096                                                   // webLogTask (HTTP-Server benötigt mehr Stack)
 
 // ── Web-Logger ────────────────────────────────────────────────

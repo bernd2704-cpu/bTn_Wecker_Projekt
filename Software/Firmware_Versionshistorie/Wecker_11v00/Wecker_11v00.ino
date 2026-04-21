@@ -1,6 +1,6 @@
 // bTn Wecker mit OLED-Anzeige und MP3-Player
-// Basis: bTn_Alarm_8v2 – FreeRTOS + State Machine + WiFi-Konfigurator
-// Boardverwalter: esp32 3.3.7 von Espressif Systems
+// Basis: bTn_Wecker_9v18 – FreeRTOS + State Machine + WiFi-Konfigurator
+// Boardverwalter: esp32 3.3.8 von Espressif Systems
 //
 // ─── State Machines ──────────────────────────────────────────
 //
@@ -34,13 +34,16 @@
 //                             Core 0: physisch getrennt von inputTask → kein CPU-Scheduling-Konflikt
 //  wifiTask    Core 0  Pri 1  WiFi-Reconnect
 //  nvrTask     Core 0  Pri 1  Flash-Sicherung bei Änderung
-//  stackMonTask Core 0 Pri 1  Stack-Überwachung (Serial)
+//  stackMonTask Core 0 Pri 1  Stack-HWM + Heap-Snapshot für Web-Log
 //  watchdogTask Core 0 Pri 1  Anwendungs-Watchdog: inputTask / displayTask / alarmTask
+//  webLogTask   Core 0 Pri 1  HTTP-Server Port WEBLOG_PORT → Ring-Puffer als Web-Seite
+//
+//  Hardware-TWDT (ESP32): inputTask, displayTask, alarmTask abonniert.
+//  Timeout WDT_HARDWARE_MS – hardware-basiert, unabhängig vom FreeRTOS-Scheduler.
+//  Verhindert CPU-Lock durch hängenden Task auf Hardware-Ebene.
 //  inputTask   Core 1  Pri 2  Dispatch → UI-State-Machine
 //  displayTask Core 1  Pri 1  Zeitanzeige, Auto-Rückkehr
 // ─────────────────────────────────────────────────────────────
-
-const char PGMInfo[] = "bTn_Alarm_8v2";                                                  // PROGMEM-fähig; kein String-Heap-Fragment
 
 // ── Bibliotheken ─────────────────────────────────────────────
 #include <WiFi.h>
@@ -52,11 +55,14 @@ const char PGMInfo[] = "bTn_Alarm_8v2";                                         
 #include <Preferences.h>
 #include <nvs_flash.h>
 #include <driver/touch_pad.h>
-#include <freertos/semphr.h>
+#include <freertos/semphr.h>          // FreeRTOS Semaphore / Mutex API
+#include <esp_task_wdt.h>             // ESP32 Hardware Task Watchdog Timer (TWDT)
 
 // ── Konfiguration ────────────────────────────────────────────
-#include "SystemConfig.h"
+#include "SysConf_11v00.h"                                                               // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
 #include "WEB.h"
+
+const char PGMInfo[] = "bTn_Wecker_" FW_VERSION;                                          // PROGMEM-fähig; kein String-Heap-Fragment
 
 // ── WiFi-Laufzeit-Zugangsdaten (aus NVR, ab 4v0) ─────────────
 // Werden in loadWifiCredentials() gefüllt und danach in
@@ -112,6 +118,8 @@ static TaskHandle_t hInputTask   = nullptr;
 static TaskHandle_t hDisplayTask = nullptr;
 static TaskHandle_t hAlarmTask      = nullptr; // Handle für stackMonTask-Abfrage
 static TaskHandle_t hWatchdogTask   = nullptr; // Handle für watchdogTask
+static TaskHandle_t hStackMonTask   = nullptr; // 9v14: HWM-Abfrage von außerhalb
+static TaskHandle_t hWebLogTask     = nullptr; // 9v14: HWM-Abfrage von außerhalb
 
 // ── Hardware ─────────────────────────────────────────────────
 SSD1306Wire         display(0x3C, SDA, SCL, GEOMETRY_128_64);
@@ -130,17 +138,18 @@ char    zeit_WiFi[9];
 
 // NTP-Callback schreibt in tmp-Puffer + setzt Flag.
 // displayTask überträgt unter displayMutex in datum_sync/zeit_sync.
-// Verhindert Race Condition zwischen SNTP-Task und menu(6).
+// Verhindert Race Condition zwischen SNTP-Task und menu(7).
 static char          datum_sync_tmp[9];
 static char          zeit_sync_tmp[9];
 static volatile bool ntpSyncPending  = false; // true: NTP-Callback hat neue Daten, displayTask überträgt
-static char          datum_WiFi_tmp[9];        // Double-Buffer: wifiTask schreibt hier (Core 0, kein Mutex nötig)
+static char          datum_WiFi_tmp[9];        // Double-Buffer: wifiTask schreibt nur bei !wifiSyncPending (Core 0)
 static char          zeit_WiFi_tmp[9];         // displayTask überträgt unter displayMutex nach datum_WiFi/zeit_WiFi
-static volatile bool wifiSyncPending = false;  // true: wifiTask hat neue Verbindungsdaten
+static volatile bool wifiSyncPending = false;  // 11v00: dient zugleich als Schreibsperre für wifiTask (verhindert Torn-Read)
 volatile uint8_t t_hour;
 volatile uint8_t t_min;
 volatile uint8_t t_sec;
-volatile uint8_t t_sec_alt;
+// 9v14: t_sec_alt wanderte in displayTask als static – nur dieser Task
+// liest/schreibt; file-scope suggerierte fälschlich Mehr-Task-Zugriff.
 
 // ── Alarm ────────────────────────────────────────────────────
 bool    a1_on   = true;
@@ -151,10 +160,10 @@ bool    a2_on   = true;
 uint8_t a2_hour = 6;
 uint8_t a2_min  = 0;
 char    str_a2[6];
-volatile bool    ax_live = false;
 
 volatile uint32_t t_start4 = 0;
-         uint32_t lastTouchMs = 0;                                                       // Zeitstempel letzter Touch-Event (EVT_T0–T4)
+volatile uint32_t lastTouchMs = 0;                                                       // Zeitstempel letzter Touch-/Taster-Event (EVT_T0–T4, EVT_S3)
+static volatile bool displayBlanked = false;                                             // 10v00: true wenn OLED nach DISPLAY_TIMEOUT_MS abgeschaltet wurde
 volatile uint32_t t_start6 = 0;
          uint32_t t_start7 = 0;
 
@@ -170,15 +179,27 @@ char    str_s2[4];
 uint8_t sound2_assigned = 1;
 char    str_s2_play[4];
 uint8_t vol         = 9;
-uint8_t MAX_VOL     = 20;
+uint8_t MAX_VOL     = 25;
 char    str_vol[3];
-int16_t playerStatus = 0;      // nur Core 1: alarmTask schreibt, alarmTask liest – kein volatile nötig
+int16_t playerStatus = 0;      // nur Core 0: alarmTask schreibt, alarmTask liest – kein volatile nötig
 int16_t mp3Count    = 0;
 char    str_mp3[4];
 uint32_t resetCount = 0;
-char     str_reset[5];                                                                   // "nnn" + null (max 999 Resets sichtbar)
+char     str_reset[5];                                                                   // "nnnn" + null (max 9999 Resets sichtbar)
 
 volatile bool safeChange = false;
+// 11v00: Zeitstempel des letzten Events, das safeChange gesetzt hat.
+// inputTask gibt nvrSemaphore erst frei, wenn seit diesem Zeitpunkt
+// mind. NVR_COMMIT_DELAY_MS ohne weiteres Event vergangen sind.
+// Schützt Flash vor Writes bei gehaltener Einstelltaste (Touch-REPEAT).
+static volatile uint32_t safeChangeMs = 0;
+
+// 11v00: Markiert eine persistierbare Änderung – Timestamp wird bei jedem
+// neuen Event aktualisiert, sodass der Debounce-Zeitraum neu beginnt.
+static inline void markSafeChange() {
+  safeChangeMs = millis();
+  safeChange   = true;
+}
 
 // ── Taster Toggle-Status ─────────────────────────────────────
 bool          S2_SW = false;                                                             // Toggle-Status Zugschalter
@@ -197,7 +218,7 @@ volatile uint8_t pageselect = 0;
 
 // ── Taster-Debounce ──────────────────────────────────────────
 // Zwei-Stufen-Debouncing:
-//   isrBtnMs[]  – ISR-Ebene:      filtert Hardware-Prellen (BTN_LOCKOUT_MS  =  30 ms)
+//   isrBtnMs[]  – ISR-Ebene:      filtert Hardware-Prellen (BTN_DEBOUNCE_MS =  30 ms)
 //   lastBtnMs[] – Task-Ebene:     Aktionssperre            (BTN_LOCKOUT_MS   = 1000 ms)
 static volatile uint32_t isrBtnMs[3] = {};  // IRAM-zugänglich: von ISR gelesen/geschrieben
 static uint32_t          lastBtnMs[3] = {}; // von inputTask gelesen/geschrieben
@@ -210,6 +231,121 @@ static volatile uint32_t wdg_displayTask = 0; // gesetzt von displayTask (alle D
 static volatile uint32_t wdg_alarmTask   = 0; // gesetzt von alarmTask   (alle 500 ms)
 
 
+
+
+// =============================================================
+//  Web-Logger  (ab 9v1)
+//
+//  webLog(msg) ersetzt Serial.*-Ausgaben nach WiFi-Connect.
+//  Schreibt in einen Ring-Puffer (WEBLOG_LINES Einträge).
+//  webLogTask startet einen HTTP-Server auf Port WEBLOG_PORT.
+//  Browser ruft / auf → HTML-Seite mit Auto-Refresh alle 20 s.
+//  /log liefert den aktuellen Pufferinhalt als plain text.
+//  webLogReady-Flag: webLog() puffert erst wenn Task gestartet.
+// =============================================================
+
+static SemaphoreHandle_t webLogMutex  = nullptr;          // schützt den Ring-Puffer
+
+// Ring-Puffer
+static char   webLogBuf[WEBLOG_LINES][WEBLOG_LINE_LEN];   // Zeilen-Array
+static uint16_t webLogHead = 0;                            // nächste Schreibposition
+static uint16_t webLogCount = 0;                           // bisher eingetragene Zeilen
+
+// ── Snapshots: jeweils letzter Wert mit Timestamp ─────────────
+// Werden unter webLogMutex geschrieben und in der Web-Seite
+// als dedizierte Sektionen angezeigt (nicht im Ring-Puffer).
+#define SNAP_BUF_LEN  480
+static char snapTouchBuf[SNAP_BUF_LEN] = "(noch keine Daten)";
+static char snapTouchTime[20]          = "";
+static char snapStackBuf[SNAP_BUF_LEN] = "(noch keine Daten)";
+static char snapStackTime[20]          = "";
+static char snapNtpTime[20]            = "";
+
+// Schreibt eine Nachricht in den Ring-Puffer (thread-safe).
+// Bleibt still wenn Mutex noch nicht initialisiert.
+void webLog(const char* msg) {
+  if (!webLogMutex) return;
+  if (xSemaphoreTake(webLogMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+    snprintf(webLogBuf[webLogHead], WEBLOG_LINE_LEN, "%s", msg);
+    webLogHead  = (webLogHead + 1) % WEBLOG_LINES;        // Überlauf: älteste Zeile überschreiben
+    if (webLogCount < WEBLOG_LINES) webLogCount++;
+    xSemaphoreGive(webLogMutex);
+  }
+}
+
+// Printf-Variante für komfortablen Aufruf
+void webLogf(const char* fmt, ...) {
+  char buf[WEBLOG_LINE_LEN];
+  va_list args;
+  va_start(args, fmt);
+  vsnprintf(buf, sizeof(buf), fmt, args);
+  va_end(args);
+  webLog(buf);
+}
+
+// Schreibt den aktuellen Zeitstempel in buf (NTP-Uhrzeit oder Uptime)
+static void snapTimeStr(char* buf, size_t len) {
+  time_t t = time(nullptr);
+  if (t > 1700000000UL) {
+    struct tm tm_val;
+    localtime_r(&t, &tm_val);
+    strftime(buf, len, "%d.%m.%Y %H:%M:%S", &tm_val);
+  } else {
+    snprintf(buf, len, "+%lus", millis() / 1000UL);
+  }
+}
+
+// Aktualisiert den Touch-Baseline-Snapshot (thread-safe)
+static void updateSnapTouch(const uint16_t* baseline) {
+  char tmp[SNAP_BUF_LEN];
+  int pos = 0;
+  for (int i = 0; i < 4 && pos < (int)sizeof(tmp) - 1; i++) {
+    uint16_t thr = (baseline[i] > TOUCH_DROP)
+                 ? baseline[i] - TOUCH_DROP
+                 : baseline[i] - baseline[i] / 5;
+    pos += snprintf(tmp + pos, sizeof(tmp) - pos,
+                    "  Pad %d  Baseline: %u  Threshold: %u\n", i, baseline[i], thr);
+  }
+  if (pos > 0 && tmp[pos - 1] == '\n') tmp[pos - 1] = '\0';
+  if (webLogMutex && xSemaphoreTake(webLogMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+    strncpy(snapTouchBuf, tmp, SNAP_BUF_LEN - 1);
+    snapTouchBuf[SNAP_BUF_LEN - 1] = '\0';
+    snapTimeStr(snapTouchTime, sizeof(snapTouchTime));
+    xSemaphoreGive(webLogMutex);
+  }
+}
+
+// Aktualisiert den Stack-HWM-Snapshot (thread-safe)
+static void updateSnapStack() {
+  char tmp[SNAP_BUF_LEN];
+  int pos = 0;
+  pos += snprintf(tmp + pos, sizeof(tmp) - pos,
+    "  touchTask   : %4u\n", uxTaskGetStackHighWaterMark(hTouchTask));
+  pos += snprintf(tmp + pos, sizeof(tmp) - pos,
+    "  wifiTask    : %4u\n", uxTaskGetStackHighWaterMark(hWifiTask));
+  pos += snprintf(tmp + pos, sizeof(tmp) - pos,
+    "  nvrTask     : %4u\n", uxTaskGetStackHighWaterMark(hNvrTask));
+  pos += snprintf(tmp + pos, sizeof(tmp) - pos,
+    "  inputTask   : %4u\n", uxTaskGetStackHighWaterMark(hInputTask));
+  pos += snprintf(tmp + pos, sizeof(tmp) - pos,
+    "  displayTask : %4u\n", uxTaskGetStackHighWaterMark(hDisplayTask));
+  pos += snprintf(tmp + pos, sizeof(tmp) - pos,
+    "  alarmTask   : %4u\n", uxTaskGetStackHighWaterMark(hAlarmTask));
+  pos += snprintf(tmp + pos, sizeof(tmp) - pos,
+    "  watchdogTask: %4u\n", uxTaskGetStackHighWaterMark(hWatchdogTask));
+  pos += snprintf(tmp + pos, sizeof(tmp) - pos,
+    "  stackMonTask: %4u\n", uxTaskGetStackHighWaterMark(hStackMonTask));  // 9v14: Handle statt nullptr (identisch, aber konsistent)
+  pos += snprintf(tmp + pos, sizeof(tmp) - pos,
+    "  webLogTask  : %4u\n", uxTaskGetStackHighWaterMark(hWebLogTask));    // 9v14: neu mitgemessen
+  pos += snprintf(tmp + pos, sizeof(tmp) - pos,
+    "  Freier Heap : %u Bytes", esp_get_free_heap_size());
+  if (webLogMutex && xSemaphoreTake(webLogMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+    strncpy(snapStackBuf, tmp, SNAP_BUF_LEN - 1);
+    snapStackBuf[SNAP_BUF_LEN - 1] = '\0';
+    snapTimeStr(snapStackTime, sizeof(snapStackTime));
+    xSemaphoreGive(webLogMutex);
+  }
+}
 
 // =============================================================
 //  Hilfsfunktionen
@@ -237,11 +373,16 @@ void showTime() {
 // NTP-Synchronisations-Callback (wird vom SNTP-Task aufgerufen, nicht vom
 // Haupt-Task). Schreibt nur in thread-lokale tmp-Puffer und setzt ein Flag.
 // displayTask überträgt die Daten sicher unter displayMutex.
+// 9v12: lokale tm-Struktur verwenden (statt globaler timeinfo) – vermeidet
+// Race Condition mit showTime() im displayTask, das dieselben globalen
+// Variablen ohne Sync-Bezug zum SNTP-Task beschreibt.
 void timeavailable(struct timeval *t) {
-  time(&now);
-  localtime_r(&now, &timeinfo);
-  snprintf(datum_sync_tmp, sizeof(datum_sync_tmp), "%04u%02u%02u", timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday);
-  snprintf(zeit_sync_tmp,  sizeof(zeit_sync_tmp),  "%02u:%02u:%02u", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+  time_t    now_local;
+  struct tm tm_local;
+  time(&now_local);
+  localtime_r(&now_local, &tm_local);
+  snprintf(datum_sync_tmp, sizeof(datum_sync_tmp), "%04u%02u%02u", tm_local.tm_year + 1900, tm_local.tm_mon + 1, tm_local.tm_mday);
+  snprintf(zeit_sync_tmp,  sizeof(zeit_sync_tmp),  "%02u:%02u:%02u", tm_local.tm_hour, tm_local.tm_min, tm_local.tm_sec);
   ntpSyncPending = true;                                                                   // displayTask überträgt unter Mutex
 }
 
@@ -291,19 +432,19 @@ void zeigeZ16L(uint8_t xPos, uint8_t yPos, const char* TXT) {
 // Alarm-Checkboxen (nutzt pageselect – wird von uiTransition synchron gesetzt)
 void checkboxAlarm() {
   display.setColor(BLACK);
-  display.fillRect(68, 38, 7, 7);
-  display.fillRect(68, 55, 7, 7);
+  display.fillRect(67, 37, 10, 10);
+  display.fillRect(67, 54, 10, 10);
   display.setColor(WHITE);
   switch (pageselect) {
     case 0:
-      if (a1_on) { display.fillRect(68, 38, 7, 7); } else { display.drawRect(68, 38, 7, 7); }
-      if (a2_on) { display.fillRect(68, 55, 7, 7); } else { display.drawRect(68, 55, 7, 7); }
+      display.drawRect(67, 37, 10, 10); if (a1_on) { display.fillRect(70, 40, 4, 4); }
+      display.drawRect(67, 54, 10, 10); if (a2_on) { display.fillRect(70, 57, 4, 4); }
       break;
     case 1:
-      if (a1_on) { display.fillRect(68, 38, 7, 7); } else { display.drawRect(68, 38, 7, 7); }
+      display.drawRect(67, 37, 10, 10); if (a1_on) { display.fillRect(70, 40, 4, 4); }
       break;
     case 2:
-      if (a2_on) { display.fillRect(68, 55, 7, 7); } else { display.drawRect(68, 55, 7, 7); }
+      display.drawRect(67, 54, 10, 10); if (a2_on) { display.fillRect(70, 57, 4, 4); }
       break;
   }
   display.display();                                                                   // einmaliger Flush nach allen Zeichenoperationen
@@ -311,13 +452,14 @@ void checkboxAlarm() {
 
 void checkboxSound() {
   display.setColor(BLACK);
-  display.fillRect(68, 38, 7, 7);
-  display.fillRect(68, 55, 7, 7);
+  display.fillRect(67, 37, 10, 10);
+  display.fillRect(67, 54, 10, 10);
   display.setColor(WHITE);
   switch (pageselect) {
     case 3:
       if (sound1_on) {
-        display.fillRect(68, 38, 7, 7);
+        display.drawRect(67, 37, 10, 10);
+        display.fillRect(70, 40, 4, 4);
         display.display();                                                               // Checkbox anzeigen bevor Audio startet
         sound1_assigned = sound1_selected;
         if (xSemaphoreTake(playerMutex, pdMS_TO_TICKS(50)) == pdTRUE) {                  // 50 ms < 100 ms displayMutex-Timeout
@@ -325,7 +467,7 @@ void checkboxSound() {
           xSemaphoreGive(playerMutex);
         }
       } else {
-        display.drawRect(68, 38, 7, 7);
+        display.drawRect(67, 37, 10, 10);
         display.display();                                                               // Checkbox anzeigen bevor Player gestoppt
         if (xSemaphoreTake(playerMutex, pdMS_TO_TICKS(50)) == pdTRUE) {                  // 50 ms < 100 ms displayMutex-Timeout
           player.stop();
@@ -335,7 +477,8 @@ void checkboxSound() {
       break;
     case 4:
       if (sound2_on) {
-        display.fillRect(68, 55, 7, 7);
+        display.drawRect(67, 54, 10, 10);
+        display.fillRect(70, 57, 4, 4);
         display.display();                                                               // Checkbox anzeigen bevor Audio startet
         sound2_assigned = sound2_selected;
         if (xSemaphoreTake(playerMutex, pdMS_TO_TICKS(50)) == pdTRUE) {                  // 50 ms < 100 ms displayMutex-Timeout
@@ -343,7 +486,7 @@ void checkboxSound() {
           xSemaphoreGive(playerMutex);
         }
       } else {
-        display.drawRect(68, 55, 7, 7);
+        display.drawRect(67, 54, 10, 10);
         display.display();                                                               // Checkbox anzeigen bevor Player gestoppt
         if (xSemaphoreTake(playerMutex, pdMS_TO_TICKS(50)) == pdTRUE) {                  // 50 ms < 100 ms displayMutex-Timeout
           player.stop();
@@ -356,13 +499,13 @@ void checkboxSound() {
 
 void checkboxFunction() {
   display.setColor(BLACK);
-  display.fillRect(35, 21, 7, 7);
-  display.fillRect(35, 38, 7, 7);
-  display.fillRect(35, 55, 7, 7);
+  display.fillRect(32, 20, 10, 10);
+  display.fillRect(32, 37, 10, 10);
+  display.fillRect(32, 54, 10, 10);
   display.setColor(WHITE);
-  if (cuckoo_on) { display.fillRect(35, 21, 7, 7); } else { display.drawRect(35, 21, 7, 7); }
-  if (light_on)  { display.fillRect(35, 38, 7, 7); } else { display.drawRect(35, 38, 7, 7); }
-  if (wheel_on)  { display.fillRect(35, 55, 7, 7); } else { display.drawRect(35, 55, 7, 7); }
+  display.drawRect(32, 20, 10, 10); if (cuckoo_on) { display.fillRect(35, 23, 4, 4); }
+  display.drawRect(32, 37, 10, 10); if (light_on)  { display.fillRect(35, 40, 4, 4); }
+  display.drawRect(32, 54, 10, 10); if (wheel_on)  { display.fillRect(35, 57, 4, 4); }
   display.display();                                                                   // einmaliger Flush nach allen Zeichenoperationen
 }
 
@@ -467,8 +610,10 @@ void menu(uint8_t page) {   // uint8_t: Koordinatenbereich 0–7 entspricht UiSt
       zeigeZ10L(28, 40, str_mp3);
       zeigeZ10C(78,  40, "RESET");
       zeigeZ10R(127, 40, str_reset);                                                     // rechtsbündig
-      zeigeZ10L(1,  54, "WLAN");
-      zeigeZ10R(127, 54, sta_ssid);         // aktive SSID anzeigen
+      { char webLogUrl[24];
+        snprintf(webLogUrl, sizeof(webLogUrl), "%s:%u",
+                 WiFi.localIP().toString().c_str(), (unsigned)WEBLOG_PORT);
+        zeigeZ10C(63,  54, webLogUrl); }    // Web-Log-Adresse anzeigen
       // Hinweis: T0 drücken startet WiFi-Konfigurator
       // (wird unterhalb der Box angezeigt, blinkt nicht – statisch)
       // T4 löst Werksreset aus (NVS löschen + Neustart)
@@ -480,7 +625,7 @@ void menu(uint8_t page) {   // uint8_t: Koordinatenbereich 0–7 entspricht UiSt
 
 
 // =============================================================
-//  NVR (Flash-Persistenz)  –  unverändert
+//  NVR (Flash-Persistenz)
 // =============================================================
 
 void writeNVR() {
@@ -528,8 +673,12 @@ void readNVR() {
   if (sound1_assigned < 1) sound1_assigned = 1;                // DFPlayer: Dateinummer min. 1
   if (sound2_assigned < 1) sound2_assigned = 1;                // Obergrenze erst nach mp3Count bekannt
   if (vol > MAX_VOL)   vol = MAX_VOL;                  // Lautstärke 0–MAX_VOL
+}
 
-  resetCount  = data.getUInt("resetCount",   0);
+// 9v14: Reset-Zähler in eigener Funktion – readNVR() ist jetzt seiteneffektfrei.
+// Muss innerhalb einer offenen data.begin()/end()-Session aus setup() aufgerufen werden.
+void bumpResetCount() {
+  resetCount = data.getUInt("resetCount", 0);
   resetCount++;                                                                          // Neustart zählen
   data.putUInt("resetCount", resetCount);
 }
@@ -711,7 +860,7 @@ static UiState onClock(uint8_t evt) {
         cleanTXT(115, 17, 15, 10);
         zeigeZ10L(115, 17, str_vol);
         display.display();                                                               // partielles Update übertragen
-        safeChange = true;
+        markSafeChange();
       }
       break;
     case EVT_T4:                                                                         // Lautstärke –
@@ -725,7 +874,7 @@ static UiState onClock(uint8_t evt) {
         cleanTXT(115, 17, 15, 10);
         zeigeZ10L(115, 17, str_vol);
         display.display();                                                               // partielles Update übertragen
-        safeChange = true;
+        markSafeChange();
       }
       break;
   }
@@ -738,7 +887,7 @@ static UiState onAlarm1(uint8_t evt) {
     case EVT_T2:
       a1_on = !a1_on;
       checkboxAlarm();
-      safeChange = true;
+      markSafeChange();
       break;
     case EVT_T3:                                                                         // Stunde +
       if (a1_hour < 23) { a1_hour++; } else { a1_hour = 0; }
@@ -746,7 +895,7 @@ static UiState onAlarm1(uint8_t evt) {
       cleanTXT(82, 34, 46, 13);
       zeigeZ16C(105, 32, str_a1);
       display.display();                                                                 // partielles Update übertragen
-      safeChange = true;
+      markSafeChange();
       break;
     case EVT_T4:                                                                         // Minute +
       if (a1_min < 59) { a1_min++; } else { a1_min = 0; }
@@ -754,7 +903,7 @@ static UiState onAlarm1(uint8_t evt) {
       cleanTXT(82, 34, 46, 13);
       zeigeZ16C(105, 32, str_a1);
       display.display();                                                                 // partielles Update übertragen
-      safeChange = true;
+      markSafeChange();
       break;
   }
   return UI_ALARM1;
@@ -766,7 +915,7 @@ static UiState onAlarm2(uint8_t evt) {
     case EVT_T2:
       a2_on = !a2_on;
       checkboxAlarm();
-      safeChange = true;
+      markSafeChange();
       break;
     case EVT_T3:                                                                         // Stunde +
       if (a2_hour < 23) { a2_hour++; } else { a2_hour = 0; }
@@ -774,7 +923,7 @@ static UiState onAlarm2(uint8_t evt) {
       cleanTXT(82, 51, 46, 13);                                                          // A2-Zeile (Y=49) – war fälschlich 34 (A1-Zeile)
       zeigeZ16C(105, 49, str_a2);
       display.display();                                                                 // partielles Update übertragen
-      safeChange = true;
+      markSafeChange();
       break;
     case EVT_T4:                                                                         // Minute +
       if (a2_min < 59) { a2_min++; } else { a2_min = 0; }
@@ -782,7 +931,7 @@ static UiState onAlarm2(uint8_t evt) {
       cleanTXT(82, 51, 46, 13);
       zeigeZ16C(105, 49, str_a2);
       display.display();                                                                 // partielles Update übertragen
-      safeChange = true;
+      markSafeChange();
       break;
   }
   return UI_ALARM2;
@@ -808,16 +957,19 @@ static UiState onSound1(uint8_t evt) {
       zeigeZ16C(105, 32, str_s1);
       sound1_on = false;
       checkboxSound();
-      safeChange = true;
+      markSafeChange();
       break;
     case EVT_T4:                                                                         // Sound 1 –
-      if (sound1_selected > 1) { sound1_selected--; } else { sound1_selected = mp3Count; }
+      // 9v13: Fallback auf 1 wenn mp3Count == 0 – vermeidet ungültige
+      // Dateinummer 0 an DFPlayer (kann beim Boot vor readFileCounts auftreten).
+      if (sound1_selected > 1) { sound1_selected--; }
+      else                     { sound1_selected = (mp3Count >= 1) ? mp3Count : 1; }
       snprintf(str_s1, sizeof(str_s1), "%03u", sound1_selected);
       cleanTXT(82, 34, 46, 13);
       zeigeZ16C(105, 32, str_s1);
       sound1_on = false;
       checkboxSound();
-      safeChange = true;
+      markSafeChange();
       break;
   }
   return UI_SOUND1;
@@ -843,16 +995,18 @@ static UiState onSound2(uint8_t evt) {
       zeigeZ16C(105, 49, str_s2);                                                        // S2-Zeile – war fälschlich 32 (S1-Zeile)
       sound2_on = false;
       checkboxSound();
-      safeChange = true;
+      markSafeChange();
       break;
     case EVT_T4:                                                                         // Sound 2 –
-      if (sound2_selected > 1) { sound2_selected--; } else { sound2_selected = mp3Count; }
+      // 9v13: Fallback auf 1 wenn mp3Count == 0 (analog Sound 1)
+      if (sound2_selected > 1) { sound2_selected--; }
+      else                     { sound2_selected = (mp3Count >= 1) ? mp3Count : 1; }
       snprintf(str_s2, sizeof(str_s2), "%03u", sound2_selected);
       cleanTXT(82, 51, 46, 13);
       zeigeZ16C(105, 49, str_s2);
       sound2_on = false;
       checkboxSound();
-      safeChange = true;
+      markSafeChange();
       break;
   }
   return UI_SOUND2;
@@ -864,17 +1018,17 @@ static UiState onFuncs(uint8_t evt) {
     case EVT_T2:
       cuckoo_on = !cuckoo_on;
       checkboxFunction();
-      safeChange = true;
+      markSafeChange();
       break;
     case EVT_T3:
       light_on = !light_on;
       checkboxFunction();
-      safeChange = true;
+      markSafeChange();
       break;
     case EVT_T4:
       wheel_on = !wheel_on;
       checkboxFunction();
-      safeChange = true;
+      markSafeChange();
       break;
   }
   return UI_FUNCS;
@@ -889,7 +1043,7 @@ static UiState onCuckooTime(uint8_t evt) {
       cleanTXT(78, 35, 23, 13);
       zeigeZ16C(91, 32, str_cot);
       display.display();                                                                 // partielles Update übertragen
-      safeChange = true;
+      markSafeChange();
       break;
     case EVT_T4:                                                                         // bis hh +
       if (cuckoo_offTime < 23) { cuckoo_offTime++; } else { cuckoo_offTime = 0; }
@@ -897,7 +1051,7 @@ static UiState onCuckooTime(uint8_t evt) {
       cleanTXT(78, 52, 23, 13);
       zeigeZ16C(91, 49, str_coff);
       display.display();                                                                 // partielles Update übertragen
-      safeChange = true;
+      markSafeChange();
       break;
   }
   return UI_CUCKOO_TIME;
@@ -973,39 +1127,56 @@ static UiState uiDispatch(UiState s, uint8_t evt) {
 static uint8_t lastA1Min = 0xFF;  // Alarm-Minuten-Sperre (file-scope: auch vom manuellen Abbruch setzbar)
 static uint8_t lastA2Min = 0xFF;
 
+// Display einschalten, falls abgeschaltet – analog zum Touch-Wake in inputTask.
+static void wakeDisplay() {
+  if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+    if (displayBlanked) {
+      display.displayOn();
+      displayBlanked = false;
+      lastTouchMs = millis();
+    }
+    xSemaphoreGive(displayMutex);
+  }
+}
+
 // ── Alarm-State-Machine ──────────────────────────────────────
 // sec/min/hour: atomarer Zeitschnappschuss aus alarmTask – keine Race Condition mit displayTask
 static void runAlarmMachine(uint8_t sec, uint8_t min, uint8_t hour) {
   switch (alarmState) {
 
     case ALARM_IDLE:
+      // 9v13: lastA*Min und Zustandsübergang nur NACH erfolgreichem
+      // playFolder – vermeidet stille Alarme bei playerMutex-Timeout
+      // (z.B. während langem WebLog-Zugriff). Nächster alarmTask-Tick
+      // (500 ms später) versucht es dann erneut innerhalb derselben
+      // Sekunde 0 → Alarm kommt verzögert aber zuverlässig.
       // Alarm 1 prüfen
       if (a1_on && sec == 0 && min == a1_min && hour == a1_hour
           && min != lastA1Min) {                                                         // nicht dieselbe Minute wiederholen
-        lastA1Min = min;
         if (xSemaphoreTake(playerMutex, pdMS_TO_TICKS(200)) == pdTRUE) {
           player.playFolder(1, sound1_assigned);
           xSemaphoreGive(playerMutex);
+          lastA1Min = min;                                                               // erst nach erfolgreichem Start sperren
+          if (wheel_on) { digitalWrite(E2, HIGH); }
+          if (light_on) { digitalWrite(E3, HIGH); }
+          t_start6   = millis();
+          alarmState = ALARM_RUNNING;                                                    // → ALARM_RUNNING
+          wakeDisplay();
         }
-        if (wheel_on) { digitalWrite(E2, HIGH); }
-        if (light_on) { digitalWrite(E3, HIGH); }
-        t_start6   = millis();
-        ax_live    = true;
-        alarmState = ALARM_RUNNING;                                                      // → ALARM_RUNNING
       }
       // Alarm 2 prüfen (else if → Alarm 1 hat Vorrang bei gleicher Zeit)
       else if (a2_on && sec == 0 && min == a2_min && hour == a2_hour
           && min != lastA2Min) {                                                         // nicht dieselbe Minute wiederholen
-        lastA2Min = min;
         if (xSemaphoreTake(playerMutex, pdMS_TO_TICKS(200)) == pdTRUE) {
           player.playFolder(1, sound2_assigned);
           xSemaphoreGive(playerMutex);
+          lastA2Min = min;                                                               // erst nach erfolgreichem Start sperren
+          if (wheel_on) { digitalWrite(E2, HIGH); }
+          if (light_on) { digitalWrite(E3, HIGH); }
+          t_start6   = millis();
+          alarmState = ALARM_RUNNING;                                                    // → ALARM_RUNNING
+          wakeDisplay();
         }
-        if (wheel_on) { digitalWrite(E2, HIGH); }
-        if (light_on) { digitalWrite(E3, HIGH); }
-        t_start6   = millis();
-        ax_live    = true;
-        alarmState = ALARM_RUNNING;                                                      // → ALARM_RUNNING
       }
       break;
 
@@ -1023,10 +1194,9 @@ static void runAlarmMachine(uint8_t sec, uint8_t min, uint8_t hour) {
         }
         playerStatus = st;
         t_start6 = millis();
-        if (playerStatus < 1) {                                                          // MP3 beendet
+        if (playerStatus == 0) {                                                         // MP3 beendet (0=stopped; -1=UART-Timeout → Alarm läuft weiter)
           if (wheel_on) { digitalWrite(E2, LOW); }
           if (light_on) { digitalWrite(E3, LOW); }
-          ax_live    = false;
           lastA1Min  = 0xFF;                                                             // Sperre aufheben → nächster Alarm möglich
           lastA2Min  = 0xFF;
           alarmState = ALARM_IDLE;                                                       // → ALARM_IDLE
@@ -1102,10 +1272,8 @@ static void touchTask(void *pvParam) {
   uint16_t baseline[4];
   for (int i = 0; i < 4; i++) {
     touch_pad_read(TOUCH_PADS[i], &baseline[i]);
-    Serial.printf("Touch Pad %d  Baseline: %u  Threshold: %u\n",
-                  i, baseline[i],
-                  (baseline[i] > TOUCH_DROP) ? baseline[i] - TOUCH_DROP : baseline[i] - baseline[i] / 5);
   }
+  updateSnapTouch(baseline);                                                               // initiale Baseline im Snapshot speichern
 
   static const uint8_t EVT_ID[4] = { EVT_T0, EVT_T2, EVT_T3, EVT_T4 };
 
@@ -1125,12 +1293,7 @@ static void touchTask(void *pvParam) {
       for (int i = 0; i < 4; i++) {
         touch_pad_read(TOUCH_PADS[i], &baseline[i]);
       }
-      Serial.println("\nTouch Baseline rekalibriert:");
-      for (int i = 0; i < 4; i++) {
-        Serial.printf("  Pad %d  Baseline: %u  Threshold: %u\n",
-                      i, baseline[i],
-                      (baseline[i] > TOUCH_DROP) ? baseline[i] - TOUCH_DROP : baseline[i] - baseline[i] / 5);
-      }
+      updateSnapTouch(baseline);                                                           // Snapshot aktualisieren (kein Ring-Puffer-Eintrag)
       lastRecal = millis();
     }
 
@@ -1239,18 +1402,39 @@ void IRAM_ATTR isrS3() {
 //    EVT_S1, EVT_S2 → vor displayMutex behandeln (kein Display nötig,
 //                     kein vTaskDelay unter Mutex)
 //    alle anderen   → displayMutex holen → uiDispatch → uiTransition
-//    safeChange     → nvrSemaphore
+//    safeChange     → nvrSemaphore (erst NACH NVR_COMMIT_DELAY_MS Ruhezeit
+//                     seit safeChangeMs – schützt Flash vor Touch-REPEAT-Hammer)
 // =============================================================
 static void inputTask(void *pvParam) {
+  esp_task_wdt_add(NULL);          // Hardware-TWDT: diesen Task anmelden
   uint8_t evt;
 
   while (true) {
+    esp_task_wdt_reset();          // Hardware-TWDT zurücksetzen – alle ~50 ms
     if (xQueueReceive(inputQueue, &evt, pdMS_TO_TICKS(50)) != pdTRUE) {
       wdg_inputTask = millis();                                                        // Alive-Signal: Task läuft (auch bei leerem Queue)
-      if (safeChange) { safeChange = false; xSemaphoreGive(nvrSemaphore); }
+      if (safeChange && (millis() - safeChangeMs >= NVR_COMMIT_DELAY_MS)) {
+        safeChange = false;
+        xSemaphoreGive(nvrSemaphore);
+      }
       continue;
     }
     wdg_inputTask = millis();                                                          // Alive-Signal: Event empfangen
+
+    // ── 10v00: Display abgeschaltet → Touch weckt, Event wird verworfen ──
+    // Spec: Berührung eines Touchpads schaltet Display erneut für
+    // DISPLAY_TIMEOUT_MS (5 min, seit 10v02) ein; andere Touch-Funktionen
+    // sind nur bei eingeschaltetem Display aktiv. Hardware-Taster S1/S2/S3
+    // arbeiten unabhängig weiter.
+    if (displayBlanked && evt <= EVT_T4) {
+      if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        display.displayOn();
+        displayBlanked = false;
+        xSemaphoreGive(displayMutex);
+      }
+      lastTouchMs = millis();                                                            // DISPLAY_TIMEOUT_MS-Timer neu starten
+      continue;                                                                          // Touch-Event nicht an State-Machine weitergeben
+    }
 
     // ── S1: Alarm/Sound stoppen oder Kuckuck einmalig ───────────
     // Kein Display nötig → außerhalb displayMutex.
@@ -1259,35 +1443,53 @@ static void inputTask(void *pvParam) {
       uint32_t t_now = millis();
       if (t_now - lastBtnMs[0] >= BTN_LOCKOUT_MS) {
         lastBtnMs[0] = t_now;
+        // Erster readState-Versuch außerhalb Mutex-Dauersperre
+        int16_t st = -1;
         if (xSemaphoreTake(playerMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
-          int16_t st = player.readState();
-          uint32_t rs_start = millis();
-          while (st == -1) {                                                             // Standby-Status auflösen
-            if (millis() - rs_start >= 200) {                                           // Timeout 200 ms → DFPlayer antwortet nicht
-              st = 0;                                                                   // als "idle" behandeln → kein stop(), Kuckuck auslösen
-              break;
-            }
+          st = player.readState();
+          xSemaphoreGive(playerMutex);                                                   // Mutex sofort freigeben
+        }
+        // Standby-Status auflösen: vTaskDelay AUSSERHALB Mutex (Projektregel)
+        uint32_t rs_start = millis();
+        while (st == -1) {
+          if (millis() - rs_start >= 200) {                                             // Timeout 200 ms → DFPlayer antwortet nicht
+            st = 0;                                                                     // als "idle" behandeln → kein stop(), Kuckuck auslösen
+            break;
+          }
+          vTaskDelay(pdMS_TO_TICKS(1));                                                 // außerhalb Mutex – Projektregel eingehalten
+          if (xSemaphoreTake(playerMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
             st = player.readState();
-            vTaskDelay(pdMS_TO_TICKS(1));                                               // ← niemals unter displayMutex
+            xSemaphoreGive(playerMutex);
           }
-          if (st > 0) {
+        }
+        if (st > 0) {
+          if (xSemaphoreTake(playerMutex, pdMS_TO_TICKS(200)) == pdTRUE) {
             player.stop();
-            digitalWrite(E2, LOW);
-            digitalWrite(E3, LOW);
-            ax_live    = false;
-            alarmState = ALARM_IDLE;
-            lastA1Min  = 0xFF;                                                           // Sperren aufheben → Alarm in gleicher Minute neu auslösbar
-            lastA2Min  = 0xFF;
-          } else {
-            digitalWrite(E1, HIGH);
-            t_start4    = millis();
-            cuckooState = CUCKOO_RUNNING;
-            lastCuckooMin = t_min;                                                       // Minuten-Sperre setzen → kein Doppelstart durch Auto-Trigger
+            xSemaphoreGive(playerMutex);
           }
-          xSemaphoreGive(playerMutex);
+          digitalWrite(E2, LOW);
+          digitalWrite(E3, LOW);
+          alarmState = ALARM_IDLE;
+          lastA1Min  = 0xFF;                                                             // Sperren aufheben → Alarm in gleicher Minute neu auslösbar
+          lastA2Min  = 0xFF;
+        } else {
+          // 9v13 Hinweis: t_start4 / cuckooState / lastCuckooMin werden
+          // hier (inputTask, Core 1) und in runCuckooMachine (alarmTask,
+          // Core 0) ohne Mutex beschrieben. 32-bit-Writes sind auf
+          // Xtensa atomar (kein Torn Write); die Logik toleriert einen
+          // minimalen Zeitversatz zwischen den Feldern, weil alarmTask
+          // cuckooState als Leitzustand verwendet und t_start4 erst im
+          // Folge-Tick (500 ms) prüft. Daher bewusst ohne Mutex gelassen.
+          digitalWrite(E1, HIGH);
+          t_start4    = millis();
+          cuckooState = CUCKOO_RUNNING;
+          lastCuckooMin = t_min;                                                         // Minuten-Sperre setzen → kein Doppelstart durch Auto-Trigger
         }
       }
-      if (safeChange) { safeChange = false; xSemaphoreGive(nvrSemaphore); }
+      if (safeChange && (millis() - safeChangeMs >= NVR_COMMIT_DELAY_MS)) {
+        safeChange = false;
+        xSemaphoreGive(nvrSemaphore);
+      }
       continue;
     }
 
@@ -1306,13 +1508,16 @@ static void inputTask(void *pvParam) {
           digitalWrite(E3, LOW);
         }
       }
-      if (safeChange) { safeChange = false; xSemaphoreGive(nvrSemaphore); }
+      if (safeChange && (millis() - safeChangeMs >= NVR_COMMIT_DELAY_MS)) {
+        safeChange = false;
+        xSemaphoreGive(nvrSemaphore);
+      }
       continue;
     }
 
     // ── alle anderen Events: displayMutex holen ───────────────────
-    // Touch-Events (T0–T4) aktualisieren den Auto-Rückkehr-Timer.
-    if (evt <= EVT_T4) {
+    // Touch-Events (T0–T4) und S3 (Info-Seite) aktualisieren den Auto-Rückkehr-Timer.
+    if (evt <= EVT_T4 || evt == EVT_S3) {
       lastTouchMs = millis();
     }
 
@@ -1360,7 +1565,10 @@ static void inputTask(void *pvParam) {
       ESP.restart();
     }
 
-    if (safeChange) { safeChange = false; xSemaphoreGive(nvrSemaphore); }
+    if (safeChange && (millis() - safeChangeMs >= NVR_COMMIT_DELAY_MS)) {
+      safeChange = false;
+      xSemaphoreGive(nvrSemaphore);
+    }
   }
 }
 
@@ -1373,10 +1581,13 @@ static void inputTask(void *pvParam) {
 //  datum[], zeit[], t_* werden konsistent mit menu() geschrieben.
 //  NTP-Pending-Flag wird unter Mutex in echte Sync-Buffer übertragen.
 //  Auto-Rückkehr zu UI_CLOCK nach AUTO_RETURN_MS (20 s) ohne Touch-Eingabe.
-//  UI_INFO ist ausgenommen – nur S3 verlässt die Info-Seite.
+//  UI_INFO (Seite 7) eingeschlossen – auch von der Info-Seite kehrt Auto-Return zurück.
 // =============================================================
 static void displayTask(void *pvParam) {
+  esp_task_wdt_add(NULL);          // Hardware-TWDT: diesen Task anmelden
+  static uint8_t t_sec_alt = 0xFF;                                                         // 9v14: task-lokal (früher file-scope)
   while (true) {
+    esp_task_wdt_reset();          // Hardware-TWDT zurücksetzen – alle ~300 ms
     wdg_displayTask = millis();                                                            // Alive-Signal: vor Mutex – gültig auch wenn Mutex-Timeout auftritt
 
     if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
@@ -1398,21 +1609,41 @@ static void displayTask(void *pvParam) {
       }
 
       if (uiState == UI_CLOCK) {
+        // 9v13: Mitternachts-Redraw als One-Shot – früher wurde menu(0)
+        // ~6-7× innerhalb der 2-Sekunden-Fenster aufgerufen (alle 300 ms)
+        // und verursachte sichtbares Flackern. Jetzt genau ein Full-Redraw
+        // beim Eintritt in 00:00:00, Flag resettet bei Stundenwechsel.
+        static bool midnightDrawn = false;
         if (t_hour == 0 && t_min == 0 && t_sec < 2) {
-          uiTransition(UI_CLOCK); // Mitternacht: menu() zeichnet Seite komplett + ruft display.display() intern
-        } else if (t_sec != t_sec_alt) {
-          t_sec_alt = t_sec;
-          cleanTXT(20, 0, 120, 16);
-          zeigeZ16C(64, 0, zeit);
-          display.display();                                                             // Uhrzeitzeile übertragen
+          if (!midnightDrawn) {
+            midnightDrawn = true;
+            t_sec_alt     = t_sec;                                                       // Sekundenzähler synchron halten
+            uiTransition(UI_CLOCK); // Mitternacht: menu() zeichnet Seite komplett + ruft display.display() intern
+          }
+        } else {
+          midnightDrawn = false;
+          if (t_sec != t_sec_alt) {
+            t_sec_alt = t_sec;
+            cleanTXT(20, 0, 120, 16);
+            zeigeZ16C(64, 0, zeit);
+            display.display();                                                           // Uhrzeitzeile übertragen
+          }
         }
       }
 
-      // Auto-Rückkehr: nur wenn nicht UI_CLOCK und nicht UI_INFO,
+      // Auto-Rückkehr: nur wenn nicht UI_CLOCK,
       // und letzter Touch-Event mindestens AUTO_RETURN_MS (20 s) zurückliegt.
-      if (uiState != UI_CLOCK && uiState != UI_INFO &&
+      if (uiState != UI_CLOCK &&
           (millis() - lastTouchMs >= AUTO_RETURN_MS)) {
         uiTransition(UI_CLOCK);  // Auto-Rückkehr: menu() übernimmt display.display()
+      }
+
+      // 10v00: OLED nach DISPLAY_TIMEOUT_MS (5 min) ohne Touch-Event abschalten.
+      // Wecken erfolgt in inputTask bei Berührung eines Touchpads.
+      if (!displayBlanked &&
+          (millis() - lastTouchMs >= DISPLAY_TIMEOUT_MS)) {
+        display.displayOff();
+        displayBlanked = true;
       }
 
       xSemaphoreGive(displayMutex);
@@ -1425,15 +1656,17 @@ static void displayTask(void *pvParam) {
 
 
 // =============================================================
-//  Task 4 – alarmTask  (Core 1, Pri 2)
+//  Task 4 – alarmTask  (Core 0, Pri 2)
 //
 //  Führt Alarm- und Kuckuck-State-Machine aus.
 // =============================================================
 static void alarmTask(void *pvParam) {
+  esp_task_wdt_add(NULL);          // Hardware-TWDT: diesen Task anmelden
   while (true) {
+    esp_task_wdt_reset();          // Hardware-TWDT zurücksetzen – alle 500 ms
     // Atomarer Zeitschnappschuss – verhindert Race Condition mit displayTask:
-    // displayTask (Pri 1) könnte mitten in showTime() von alarmTask (Pri 2) verdrängt
-    // werden und t_sec/t_min/t_hour inkonsistent hinterlassen.
+    // displayTask (Core 1) und alarmTask (Core 0) laufen parallel – showTime()
+    // könnte t_sec/t_min/t_hour gerade inkonsistent beschreiben.
     // localtime_r() ist re-entrant und schreibt nur in den lokalen Puffer.
     time_t    now_alarm;
     struct tm tm_alarm;
@@ -1462,15 +1695,20 @@ static void alarmTask(void *pvParam) {
 static void wifiTask(void *pvParam) {
   while (true) {
     if (WiFi.status() != WL_CONNECTED && delayFunction(t_start7, WIFI_RECONNECT_MS)) {
+      // 11v00: tmp-Puffer nur dann neu beschreiben, wenn displayTask das
+      // vorherige Paar bereits übernommen hat (wifiSyncPending == false).
+      // Ohne diesen Guard könnte wifiTask mitten in den memcpy der
+      // displayTask hineinschreiben → Torn-Read in datum_WiFi/zeit_WiFi.
       // Lokaler Snapshot via localtime_r() – thread-safe, kein Mutex nötig.
-      // Verhindert Torn-Read der globalen tm-Struct (wird auf Core 1 von showTime() beschrieben).
-      time_t    now_local;
-      struct tm tm_local;
-      time(&now_local);
-      localtime_r(&now_local, &tm_local);
-      snprintf(datum_WiFi_tmp, sizeof(datum_WiFi_tmp), "%04u%02u%02u", tm_local.tm_year + 1900, tm_local.tm_mon + 1, tm_local.tm_mday);
-      snprintf(zeit_WiFi_tmp,  sizeof(zeit_WiFi_tmp),  "%02u:%02u:%02u", tm_local.tm_hour, tm_local.tm_min, tm_local.tm_sec);
-      wifiSyncPending = true;  // displayTask überträgt unter displayMutex → kein torn read
+      if (!wifiSyncPending) {
+        time_t    now_local;
+        struct tm tm_local;
+        time(&now_local);
+        localtime_r(&now_local, &tm_local);
+        snprintf(datum_WiFi_tmp, sizeof(datum_WiFi_tmp), "%04u%02u%02u", tm_local.tm_year + 1900, tm_local.tm_mon + 1, tm_local.tm_mday);
+        snprintf(zeit_WiFi_tmp,  sizeof(zeit_WiFi_tmp),  "%02u:%02u:%02u", tm_local.tm_hour, tm_local.tm_min, tm_local.tm_sec);
+        wifiSyncPending = true;  // displayTask überträgt unter displayMutex → kein torn read
+      }
       WiFi.begin(sta_ssid, sta_psk);                                                     // Laufzeit-Credentials aus NVR
       t_start7 = millis();
     }
@@ -1497,25 +1735,14 @@ static void nvrTask(void *pvParam) {
 // =============================================================
 //  Task 7 – stackMonTask  (Core 0, Pri 1)
 //
-//  Gibt alle STACK_MON_INTERVAL_MS (60 s) den verbleibenden
-//  Stack-Platz jedes Tasks per Serial aus (in 4-Byte-Words).
+//  Aktualisiert alle STACK_MON_INTERVAL_MS (60 s) den
+//  Stack-HWM-Snapshot (Bytes) und freien Heap für die Web-Log-Seite.
 //  Ein Wert nahe 0 zeigt drohenden Stack-Überlauf an.
-//  Gibt zusätzlich den freien Heap aus.
 // =============================================================
 static void stackMonTask(void *pvParam) {
   while (true) {
     vTaskDelay(pdMS_TO_TICKS(STACK_MON_INTERVAL_MS));
-    Serial.println("\n── Stack High-Water Marks (Words frei) ──────────");
-    Serial.printf("  touchTask   : %4u\n", uxTaskGetStackHighWaterMark(hTouchTask));
-    Serial.printf("  wifiTask    : %4u\n", uxTaskGetStackHighWaterMark(hWifiTask));
-    Serial.printf("  nvrTask     : %4u\n", uxTaskGetStackHighWaterMark(hNvrTask));
-    Serial.printf("  inputTask   : %4u\n", uxTaskGetStackHighWaterMark(hInputTask));
-    Serial.printf("  displayTask : %4u\n", uxTaskGetStackHighWaterMark(hDisplayTask));
-    Serial.printf("  alarmTask   : %4u\n", uxTaskGetStackHighWaterMark(hAlarmTask));
-    Serial.printf("  watchdogTask: %4u\n", uxTaskGetStackHighWaterMark(hWatchdogTask));
-    Serial.printf("  stackMonTask: %4u\n", uxTaskGetStackHighWaterMark(nullptr));
-    Serial.printf("  Freier Heap : %u Bytes\n", esp_get_free_heap_size());
-    Serial.println("─────────────────────────────────────────────────");
+    updateSnapStack();                                                                     // Snapshot aktualisieren (kein Ring-Puffer-Eintrag)
   }
 }
 
@@ -1546,10 +1773,10 @@ static void watchdogTask(void *pvParam) {
     bool alarmOk   = (now - wdg_alarmTask)   < WDG_TIMEOUT_MS;
 
     if (!inputOk || !displayOk || !alarmOk) {
-      Serial.println("\n[WATCHDOG] Task-Freeze erkannt!");
-      if (!inputOk)   Serial.printf("  inputTask   : %lu ms ohne Lebenszeichen\n", now - wdg_inputTask);
-      if (!displayOk) Serial.printf("  displayTask : %lu ms ohne Lebenszeichen\n", now - wdg_displayTask);
-      if (!alarmOk)   Serial.printf("  alarmTask   : %lu ms ohne Lebenszeichen\n", now - wdg_alarmTask);
+      webLog("[WATCHDOG] Task-Freeze erkannt!");
+      if (!inputOk)   webLogf("  inputTask   : %lu ms ohne Lebenszeichen", now - wdg_inputTask);
+      if (!displayOk) webLogf("  displayTask : %lu ms ohne Lebenszeichen", now - wdg_displayTask);
+      if (!alarmOk)   webLogf("  alarmTask   : %lu ms ohne Lebenszeichen", now - wdg_alarmTask);
       // Display-Meldung nur wenn displayTask noch läuft (sonst I2C-Zugriff riskant)
       if (displayOk) {
         if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
@@ -1568,6 +1795,130 @@ static void watchdogTask(void *pvParam) {
 }
 
 
+
+// =============================================================
+//  Task 9 – webLogTask  (Core 0, Pri 1)
+//
+//  Startet HTTP-Server auf Port WEBLOG_PORT sobald WiFi bereit.
+//  GET /     → HTML-Seite mit Auto-Refresh (alle 20 s)
+//  GET /log  → Ring-Puffer als plain text (neueste Zeilen zuerst)
+//  Der Task blockiert bis WiFi verbunden ist (prüft alle 2 s).
+//  Aktiv sobald sich ein Client verbindet.
+// =============================================================
+static void webLogTask(void *pvParam) {
+  // Warten bis WiFi steht
+  while (WiFi.status() != WL_CONNECTED) {
+    vTaskDelay(pdMS_TO_TICKS(2000));
+  }
+
+  WebServer logServer(WEBLOG_PORT);
+
+  // GET / → HTML-Seite
+  logServer.on("/", HTTP_GET, [&logServer]() {
+    String ip = WiFi.localIP().toString();
+    // 9v13: reserve() verhindert inkrementelle Reallokationen beim
+    // String-Zusammenbau – jede += kann den Puffer verdoppeln und
+    // alten Heap-Block freigeben → Fragmentierung. 8 kB reicht für
+    // CSS + 40 Log-Zeilen + Snapshots ohne Nachallokation.
+    String html;
+    html.reserve(8192);
+    html +=
+      "<!DOCTYPE html><html><head><meta charset='UTF-8'>"
+      "<meta http-equiv='refresh' content='20'>"
+      "<title>bTn Wecker Log</title>"
+      "<style>"
+      "body{font-family:monospace;background:#1a1a2e;color:#e0e0e0;margin:0;padding:16px}"
+      "h2{color:#BDD7EE;margin-bottom:8px;font-size:1.6rem}"
+      "h3{color:#888;font-weight:normal;font-size:1rem;margin:0 0 12px}"
+      ".snap-wrap{margin-bottom:16px}"
+      ".snap-title{font-size:1rem;color:#78909c;margin-bottom:4px}"
+      ".snap-title .ts{color:#4A9EFF;font-weight:bold}"
+      ".snap-box{background:#0d1a0d;border:1px solid #2a4a2a;border-radius:6px;padding:10px;"
+      "white-space:pre;overflow-x:auto;font-size:19px;color:#b0d0b0}"
+      "#log{background:#0d0d1a;border:1px solid #333;border-radius:6px;padding:12px;"
+      "white-space:pre;overflow-x:auto;max-height:60vh;overflow-y:auto;font-size:19px}"
+      ".ok{color:#6BCB77}.err{color:#FF6B6B}.warn{color:#FFD93D}"
+      ".sec-title{font-size:1rem;color:#78909c;margin:16px 0 4px}"
+      "</style></head><body>"
+      "<h2>&#x1F553; bTn Wecker " FW_VERSION " &ndash; Web-Log</h2>"
+      "<h3>IP: " + ip + ":" + String(WEBLOG_PORT) + " &nbsp;|&nbsp; Auto-Refresh: 20 s"
+      " &nbsp;|&nbsp; Aktualisiert: <span id='upd'></span></h3>";
+
+    // ── Ring-Puffer ──────────────────────────────────────────
+    {
+      String ntpTs = strlen(snapNtpTime) > 0 ? String(snapNtpTime) : String("–");
+      html += "<div class='sec-title'>Allgemeines Log &ndash; letzter Reset: "
+              "<span style='color:#4A9EFF'>" + ntpTs + "</span></div>";
+    }
+    html += "<div id='log'>";
+    if (webLogMutex && xSemaphoreTake(webLogMutex, pdMS_TO_TICKS(200)) == pdTRUE) {
+      uint16_t start = (webLogCount < WEBLOG_LINES)
+                     ? 0
+                     : webLogHead;                         // ältester Eintrag
+      for (uint16_t i = 0; i < webLogCount; i++) {
+        uint16_t idx = (start + i) % WEBLOG_LINES;
+        String line = String(webLogBuf[idx]);
+        if (line.indexOf("[WATCHDOG]") >= 0 || line.indexOf("[PANIC]") >= 0 || line.indexOf("failed") >= 0)
+          html += "<span class='err'>";
+        else if (line.indexOf("OK") >= 0 || line.indexOf("ready") >= 0 || line.indexOf("connected") >= 0)
+          html += "<span class='ok'>";
+        else if (line.indexOf("Timeout") >= 0 || line.indexOf("Warnung") >= 0)
+          html += "<span class='warn'>";
+        else
+          html += "<span>";
+        line.replace("<", "&lt;"); line.replace(">", "&gt;");
+        html += line + "</span>\n";
+      }
+      xSemaphoreGive(webLogMutex);
+    }
+    html += "</div>";
+
+    // ── Snapshot: Touch Baseline + Stack HWM ─────────────────
+    if (webLogMutex && xSemaphoreTake(webLogMutex, pdMS_TO_TICKS(200)) == pdTRUE) {
+      String touchTime = String(snapTouchTime);
+      String touchContent = String(snapTouchBuf);
+      String stackTime = String(snapStackTime);
+      String stackContent = String(snapStackBuf);
+      xSemaphoreGive(webLogMutex);
+
+      touchContent.replace("<", "&lt;"); touchContent.replace(">", "&gt;");
+      stackContent.replace("<", "&lt;"); stackContent.replace(">", "&gt;");
+
+      html += "<div class='snap-wrap'>"
+              "<div class='snap-title'>Touch Baseline – letzte Kalibrierung: "
+              "<span class='ts'>" + touchTime + "</span></div>"
+              "<div class='snap-box'>" + touchContent + "</div></div>";
+
+      html += "<div class='snap-wrap'>"
+              "<div class='snap-title'>Stack High-Water Marks – letzte Messung: "
+              "<span class='ts'>" + stackTime + "</span></div>"
+              "<div class='snap-box'>" + stackContent + "</div></div>";
+    }
+    html += "<script>document.getElementById('upd').textContent=new Date().toLocaleTimeString();</script></body></html>";
+    logServer.send(200, "text/html; charset=UTF-8", html);
+  });
+
+  // GET /log → plain text für curl / wget
+  logServer.on("/log", HTTP_GET, [&logServer]() {
+    String out = "";
+    if (webLogMutex && xSemaphoreTake(webLogMutex, pdMS_TO_TICKS(200)) == pdTRUE) {
+      uint16_t start = (webLogCount < WEBLOG_LINES) ? 0 : webLogHead;
+      for (uint16_t i = 0; i < webLogCount; i++) {
+        out += String(webLogBuf[(start + i) % WEBLOG_LINES]) + "\n";
+      }
+      xSemaphoreGive(webLogMutex);
+    }
+    logServer.send(200, "text/plain; charset=UTF-8", out);
+  });
+
+  logServer.begin();
+  webLogf("[RESET] resetCount: %lu", (unsigned long)resetCount);
+
+  while (true) {
+    logServer.handleClient();                              // eingehende Requests verarbeiten
+    vTaskDelay(pdMS_TO_TICKS(10));                        // 10 ms Pause – verhindert WDT-Reset
+  }
+}
 
 // =============================================================
 //  rtosPanic() – FreeRTOS-Objekt- / Task-Erstellungsfehler
@@ -1594,6 +1945,10 @@ static void rtosPanic(const char* what) {
 //  setup()
 // =============================================================
 void setup() {
+  pinMode(17, OUTPUT);
+  digitalWrite(17, LOW);
+  delay(3000);
+
   Serial.begin(115200);
   Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
   delay(2000);
@@ -1609,7 +1964,12 @@ void setup() {
     data.putBool("state", true); // Erststart-Flag dauerhaft setzen
     writeNVR();
   }
+  bumpResetCount();                                                                      // 9v14: Reset-Zähler als separater Schritt
   data.end();
+
+  // ── webLogMutex früh initialisieren: setup()-Meldungen puffern ─
+  webLogMutex = xSemaphoreCreateMutex();
+  if (!webLogMutex) rtosPanic("webLogMutex");
 
   // ── Display init (wird auch von runWifiConfigServer genutzt) ─
   display.init();
@@ -1625,7 +1985,7 @@ void setup() {
     Serial.println("[WiFi-Config] Keine Zugangsdaten – starte Konfigurator");
     runWifiConfigServer();   // kehrt nicht zurück (ESP.restart am Ende)
   }
-  Serial.printf("[WiFi] Credentials geladen: SSID=%s\n", sta_ssid);
+  webLogf("[WiFi] Credentials geladen: SSID=%s", sta_ssid);
 
   // ── NTP ──────────────────────────────────────────────────
   sntp_set_time_sync_notification_cb(timeavailable);
@@ -1662,19 +2022,28 @@ void setup() {
     wifiConnected = (WiFi.status() == WL_CONNECTED);
   }
   if (wifiConnected) {
-    Serial.println("\nWiFi connected");
-    Serial.println(WiFi.localIP());
+    // Ausnahme zur Projektregel "nach WiFi-Connect nur webLogf()":
+    // Die Web-Log-Adresse MUSS im Serial-Monitor erscheinen, sonst ist
+    // das Web-Log praktisch unerreichbar – die URL steht ja erst im
+    // Web-Log selbst, das ohne bekannte Adresse nicht aufgerufen werden
+    // kann. Dieses eine Serial.printf ist daher betrieblich notwendig.
+    Serial.printf("\nWiFi connected – IP: %s  Log: http://%s:%u\n",
+                  WiFi.localIP().toString().c_str(),
+                  WiFi.localIP().toString().c_str(),
+                  (unsigned)WEBLOG_PORT);
+    webLog("[WiFi] connected");
+    webLogf("[WiFi] IP: %s", WiFi.localIP().toString().c_str());
 
     // ── NTP warten ─────────────────────────────────────────
     cleanTXT(0, 49, 128, 15);
     zeigeZ16C(64, 49, "NTP ...");
     display.display();                                                                 // NTP-Wartemeldung anzeigen
-    Serial.println("\nwarte auf NTP");
+    webLog("[NTP] warte auf Synchronisation ...");
     {
       uint32_t t0 = millis();
       while (timeinfo.tm_year < 71) {
         if (millis() - t0 >= SETUP_NTP_TIMEOUT_MS) {
-          Serial.println("\nNTP Timeout – Uhr nicht gestellt");
+          webLog("[NTP] Timeout – Uhr nicht gestellt");
           cleanTXT(0, 49, 128, 15);
           zeigeZ10C(64, 49, "NTP Timeout");
           display.display();                                                           // NTP-Timeout-Meldung anzeigen
@@ -1683,10 +2052,11 @@ void setup() {
         }
         showTime();
         delay(500);
-        Serial.print(".");
+        // kein Web-Log für Fortschrittspunkte
       }
     }
-    Serial.println("\nNTP ready");
+    webLog("[NTP] Synchronisation OK");
+    snapTimeStr(snapNtpTime, sizeof(snapNtpTime));
   }
 
   // ── GPIO ─────────────────────────────────────────────────
@@ -1698,6 +2068,7 @@ void setup() {
   pinMode(E3, OUTPUT);
 
   // ── FreeRTOS Objekte ─────────────────────────────────────
+  // webLogMutex wurde bereits früh in setup() erstellt (vor den webLog-Aufrufen)
   inputQueue   = xQueueCreate(32, sizeof(uint8_t));
   displayMutex = xSemaphoreCreateMutex();
   playerMutex  = xSemaphoreCreateMutex();
@@ -1717,21 +2088,50 @@ void setup() {
   zeigeZ16C(64, 49, "Sound ...");
   display.display();                                                                   // DFPlayer-Initialisierung anzeigen
   if (player.begin(Serial2, true, true)) {
-    delay(3000);
-    Serial.println("\nDFPlayer Serial2 OK");
+    webLog("[DFPlayer] Serial2 OK");
+    // readFileCounts() als Bereitschaftsprüfung: DFPlayer antwortet erst, wenn
+    // SD-Karte vollständig indiziert ist. Nach Power-On/Flash dauert das länger
+    // als nach Reset-Taste (DFPlayer bleibt dort unter Spannung). Erst danach
+    // playFolder aufrufen – kein UART-Verkehr mehr während der Wiedergabe.
+    {
+      uint32_t t0 = millis();
+      while (mp3Count < 1) {
+        if (millis() - t0 >= SETUP_MP3_TIMEOUT_MS) {
+          webLog("[DFPlayer] Timeout – mp3Count unbekannt");
+          mp3Count = 99;                                                                 // Fallback: MP3-Auswahl bis Datei 99 erlauben
+          break;
+        }
+        int16_t c = player.readFileCounts();
+        if (c > 0) mp3Count = c - 1;                                                     // c==0 → mp3Count bleibt 0, kein uint8_t-Unterlauf auf 255
+      }
+    }
     player.volume(vol);
     player.EQ(DFPLAYER_EQ_BASS);
     player.playFolder(2, 1);
-    delay(1000);
+    delay(4000);
     playerStatus = 1;
   } else {
-    Serial.println("\nConnecting to DFPlayer Mini failed!");
+    webLog("[DFPlayer] Verbindung fehlgeschlagen!");
   }
+  if (sound1_assigned > mp3Count) sound1_assigned = 1;                                    // NVR-Wert > SD-Inhalt abfangen
+  if (sound2_assigned > mp3Count) sound2_assigned = 1;
+  snprintf(str_mp3, sizeof(str_mp3), "%03u", mp3Count);
+  snprintf(str_reset, sizeof(str_reset), "%04lu", (unsigned long)resetCount);            // rechtsbündig 4-stellig
+  webLogf("[DFPlayer] mp3Count: %d", mp3Count);
 
   // ── Startseite ───────────────────────────────────────────
-  snprintf(datum_WiFi,  sizeof(datum_WiFi), "%04u%02u%02u", timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday);
-  snprintf(zeit_WiFi,   sizeof(zeit_WiFi),  "%02u:%02u:%02u", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+  // 9v12: showTime() vor snprintf, damit timeinfo sicher gültig ist
+  // (ohne WiFi/NTP wurde sie in der NTP-Warteschleife nie aufgerufen
+  // und hätte "19000101" produziert). Fallback bei fehlendem NTP-Sync
+  // schreibt Platzhalterstrings statt uninitialisierter Werte.
   showTime();
+  if (wifiConnected && timeinfo.tm_year >= 71) {
+    snprintf(datum_WiFi,  sizeof(datum_WiFi), "%04u%02u%02u", timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday);
+    snprintf(zeit_WiFi,   sizeof(zeit_WiFi),  "%02u:%02u:%02u", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+  } else {
+    snprintf(datum_WiFi,  sizeof(datum_WiFi), "--------");
+    snprintf(zeit_WiFi,   sizeof(zeit_WiFi),  "--:--:--");
+  }
   snprintf(str_a1,      sizeof(str_a1),      "%02u:%02u", a1_hour, a1_min);
   snprintf(str_a2,      sizeof(str_a2),      "%02u:%02u", a2_hour, a2_min);
   snprintf(str_s1,      sizeof(str_s1),      "%03u",      sound1_selected);
@@ -1743,32 +2143,30 @@ void setup() {
   snprintf(str_coff,    sizeof(str_coff),    "%02u",      cuckoo_offTime);
   uiTransition(UI_CLOCK);                                                               // initialer Zustand + Bildschirm
 
-  // ── MP3-Anzahl ───────────────────────────────────────────
-  {
-    uint32_t t0 = millis();
-    while (mp3Count < 1) {
-      if (millis() - t0 >= SETUP_MP3_TIMEOUT_MS) {
-        Serial.println("\nDFPlayer Timeout – mp3Count unbekannt");
-        mp3Count = 99;                                                                   // Fallback: MP3-Auswahl bis Datei 99 erlauben
-        break;
-      }
-      int16_t c = player.readFileCounts();
-      if (c > 0) mp3Count = c - 1;                                                       // c==0 → mp3Count bleibt 0, kein uint8_t-Unterlauf auf 255
-    }
-  }
-  snprintf(str_mp3, sizeof(str_mp3), "%03u", mp3Count);
-  snprintf(str_reset, sizeof(str_reset), "%04lu", (unsigned long)resetCount);            // rechtsbündig 4-stellig
-  Serial.printf("Anzahl mp3-Files: %d\n", mp3Count);
-
   // ── FreeRTOS Tasks starten ───────────────────────────────
-  if (xTaskCreatePinnedToCore(touchTask,    "touchTask",    4096, nullptr, 2, &hTouchTask,   0) != pdPASS) rtosPanic("touchTask");   // Core 0, Prio 2
-  if (xTaskCreatePinnedToCore(alarmTask,    "alarmTask",    3072, nullptr, 2, &hAlarmTask,   0) != pdPASS) rtosPanic("alarmTask");   // Core 0, Prio 2 – getrennt von inputTask
-  if (xTaskCreatePinnedToCore(wifiTask,     "wifiTask",     3072, nullptr, 1, &hWifiTask,    0) != pdPASS) rtosPanic("wifiTask");    // Core 0, Prio 1
-  if (xTaskCreatePinnedToCore(nvrTask,      "nvrTask",      3072, nullptr, 1, &hNvrTask,     0) != pdPASS) rtosPanic("nvrTask");     // Core 0, Prio 1
-  if (xTaskCreatePinnedToCore(stackMonTask, "stackMonTask", 3072, nullptr, 1, nullptr,          0) != pdPASS) rtosPanic("stackMonTask"); // Core 0, Prio 1
-  if (xTaskCreatePinnedToCore(watchdogTask, "watchdogTask", 2048, nullptr, 1, &hWatchdogTask,   0) != pdPASS) rtosPanic("watchdogTask"); // Core 0, Prio 1
-  if (xTaskCreatePinnedToCore(inputTask,    "inputTask",    6144, nullptr, 2, &hInputTask,   1) != pdPASS) rtosPanic("inputTask");   // Core 1, Prio 2
-  if (xTaskCreatePinnedToCore(displayTask,  "displayTask",  4096, nullptr, 1, &hDisplayTask, 1) != pdPASS) rtosPanic("displayTask"); // Core 1, Prio 1
+  if (xTaskCreatePinnedToCore(touchTask,    "touchTask",    STACK_TOUCH, nullptr, 2, &hTouchTask,   0) != pdPASS) rtosPanic("touchTask");   // Core 0, Prio 2
+  if (xTaskCreatePinnedToCore(alarmTask,    "alarmTask",    STACK_ALARM, nullptr, 2, &hAlarmTask,   0) != pdPASS) rtosPanic("alarmTask");   // Core 0, Prio 2 – getrennt von inputTask
+  if (xTaskCreatePinnedToCore(wifiTask,     "wifiTask",     STACK_WIFI, nullptr, 1, &hWifiTask,    0) != pdPASS) rtosPanic("wifiTask");    // Core 0, Prio 1
+  if (xTaskCreatePinnedToCore(nvrTask,      "nvrTask",      STACK_NVR, nullptr, 1, &hNvrTask,     0) != pdPASS) rtosPanic("nvrTask");     // Core 0, Prio 1
+  if (xTaskCreatePinnedToCore(stackMonTask, "stackMonTask", STACK_STACKMON, nullptr, 1, &hStackMonTask,   0) != pdPASS) rtosPanic("stackMonTask"); // Core 0, Prio 1
+  if (xTaskCreatePinnedToCore(watchdogTask, "watchdogTask", STACK_WATCHDOG, nullptr, 1, &hWatchdogTask,   0) != pdPASS) rtosPanic("watchdogTask"); // Core 0, Prio 1
+  if (xTaskCreatePinnedToCore(inputTask,    "inputTask",    STACK_INPUT, nullptr, 2, &hInputTask,   1) != pdPASS) rtosPanic("inputTask");   // Core 1, Prio 2
+  if (xTaskCreatePinnedToCore(displayTask,  "displayTask",  STACK_DISPLAY, nullptr, 1, &hDisplayTask, 1) != pdPASS) rtosPanic("displayTask"); // Core 1, Prio 1
+  if (xTaskCreatePinnedToCore(webLogTask,   "webLogTask",   STACK_WEBLOG,  nullptr, 1, &hWebLogTask,  0) != pdPASS) rtosPanic("webLogTask");  // Core 0, Prio 1
+
+  // ── Hardware Task Watchdog Timer (TWDT) ──────────────
+  // Initialisierung NACH Task-Start: Tasks müssen bereits laufen bevor
+  // sie sich anmelden können (esp_task_wdt_add in Task-Funktion selbst).
+  // trigger_panic=true: TWDT-Ablauf erzeugt Backtrace + Reset statt stiller Neustart.
+  // Timeout WDT_HARDWARE_MS kürzer als Software-Watchdog WDG_TIMEOUT_MS:
+  // Hardware greift bei echtem CPU-Lock, Software bei logischem Freeze.
+  const esp_task_wdt_config_t twdt_cfg = {
+    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_11v00.h
+    .idle_core_mask = 0,               // Idle-Tasks nicht überwachen
+    .trigger_panic  = true,            // Backtrace + Reset bei Ablauf
+  };
+  esp_task_wdt_reconfigure(&twdt_cfg); // TWDT umkonfigurieren (Core 3.x init bereits beim Boot)
+  webLogf("[TWDT] Hardware Watchdog aktiv (%u ms)", (unsigned)WDT_HARDWARE_MS);
 }
 
 

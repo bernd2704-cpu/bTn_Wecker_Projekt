@@ -1,10 +1,79 @@
 #pragma once
-// SysConf_9v17.h – Konfigurationskonstanten für bTn Wecker
-// Firmware-Version : 9v17
-// Datei-Version    : 9v17
+// SysConf_11v05.h – Konfigurationskonstanten für bTn Wecker
+// Firmware-Version : 11v05
+// Datei-Version    : 11v05
 // Boardverwalter   : esp32 3.3.8 von Espressif Systems
 //
 // Änderungshistorie:
+//   11v05–Info-Seite: WLAN-Reset von T0 auf T3 verlegt – einheitliche
+//         Bedienung (Taste + = T3 = WLAN-Reset, Taste - = T4 = Werksreset).
+//         Info-Seite neu angeordnet: Z1 Versionsstring, Z2 Web-Log-Adresse,
+//         Z3 MP3-/Reset-Zähler, Z4 "Taste +  WiFi Reset", Z5 " Taste -  Full
+//         Reset". T0 auf UI_INFO bleibt wirkungslos (Seitencycle weiter
+//         durch `s != UI_INFO`-Guard geschützt), onInfo() reagiert jetzt
+//         auf EVT_T3 statt EVT_T0. Wake-Discard-Kommentar nachgezogen.
+//   11v04–S3 bei dunklem Display: Display einschalten UND Info-Seite öffnen.
+//         Ändert das 11v02-Verhalten (reines Wake+Discard) zurück zu einem
+//         kombinierten Wake+Open. Touch T0–T4 bleiben reines Wake+Discard –
+//         nur S3 reicht das Event an die UI weiter. Da Auto-Return (20 s)
+//         immer UI_CLOCK erreicht, bevor der Display-Timeout (5 min) greift,
+//         landet die Toggle-Logik in uiDispatch() sicher auf UI_INFO.
+//   11v03–resetCount zählt WiFi-Konfigurator-Boot nicht mehr mit:
+//         bumpResetCount() in setup() wird erst NACH loadWifiCredentials()
+//         aufgerufen. Nach einem Werksreset zeigte der Reset-Zähler 2 an,
+//         weil der erste Boot (leere NVS → WiFi-Konfigurator → ESP.restart)
+//         und der zweite Boot (mit gespeicherten WLAN-Daten) beide zählten.
+//         Jetzt zählt nur der reguläre Boot.
+//   11v02–Sicherheit Info-Seite + Display-Wake:
+//         (1) S3 verhält sich bei ausgeschaltetem Display jetzt analog
+//             zu T0–T4: weckt das Display und verwirft das Event,
+//             statt den Info-Toggle durchzureichen. Verhindert, dass
+//             bei aktiver UI_INFO ohne Anzeige ein blind gedrückter
+//             Taster bzw. anschließender Touch versehentlich T0 (WLAN-
+//             Reset) oder T4 (Werksreset) auslöst.
+//         (2) Info-Seite zeigt die gefährlichen Aktionen explizit:
+//             Zeilen "T0: RESET SSID PW" und "T4: WERKSRESET"
+//             ersetzen die dort zuvor duplizierten WiFi-/NTP-Zeiten.
+//         (3) Web-Log: Rubrik "Status – Letzter Start" umbenannt in
+//             "Verbindung – letzter WiFi Reconnect / NTP Sync" und
+//             unter die Ring-Puffer-Sektion verschoben.
+//   11v01–Web-Log: neue Rubrik "Status – Letzter Start" zeigt die
+//          Zeilen WiFi und NTP analog zur Info-Seite (datum_WiFi/
+//          zeit_WiFi, datum_sync/zeit_sync); platziert oberhalb der
+//          Touch-Baseline-Sektion.
+//   11v00–Review-Fixes:
+//         (1) NVR-Flash-Wear: nvrSemaphore-Release erst NACH Ruhezeit
+//             NVR_COMMIT_DELAY_MS (2 s) ohne neues Event – verhindert
+//             Flash-Writes bei gehaltener Einstelltaste im Touch-REPEAT.
+//         (2) wifiTask Double-Buffer Race: snprintf nur wenn kein altes
+//             Paar mehr pending ist (wifiSyncPending-Guard) – schließt
+//             Torn-Read-Fenster gegen displayTask.
+//         (3) Review-Vorschlag zur Log-Regel (Serial.printf nach
+//             WiFi-Connect durch webLogf ersetzen) bewusst NICHT
+//             übernommen: die Web-Log-URL muss im Serial-Monitor
+//             erscheinen, sonst ist das Web-Log unerreichbar
+//             (Adresse steht ja erst im Web-Log selbst).
+//   10v06–wakeDisplay(): TOCTOU + Race auf lastTouchMs behoben (displayBlanked-Check
+//         und lastTouchMs=millis() jetzt atomar unter displayMutex);
+//         lastTouchMs als volatile deklariert (Cross-Core-Sichtbarkeit Core0→Core1)
+//   10v05–DFPlayer TX-Pin (GPIO17) vor Serial2.begin() 3s LOW halten
+//   10v04–Web-Log: Zeile "[Reset] Anzahl: N" → "[RESET] resetCount: N"
+//   10v03–Display wird bei Alarm-Start automatisch eingeschaltet (analog
+//          Touch-Wake); Helper wakeDisplay() in alarmTask
+//   10v02–Display-Ein-Zeit DISPLAY_TIMEOUT_MS 10 min → 5 min
+//   10v01–DFPlayer-Init: 9v16-Retry-Logik zurückgenommen (player.begin()
+//          wieder als einmaliger Aufruf ohne Schleife); DFP_INIT_TIMEOUT_MS
+//          und DFP_INIT_RETRY_MS entfernt; SETUP_MP3_TIMEOUT_MS
+//          10000 → 5000 ms
+//   10v00–Display-Abschaltung nach 10 min ohne Touch (DISPLAY_TIMEOUT_MS);
+//          Berührung eines beliebigen Touchpads weckt Display erneut für
+//          10 min, das auslösende Touch-Event wird verworfen (andere
+//          Touch-Funktionen nur bei eingeschaltetem Display aktiv);
+//          Checkbox-Rahmen vereinfacht (nur äußerer 10x10 drawRect, keine
+//          inneren 8x8 drawRects mehr – schlankere Darstellung)
+//   9v18– UI: Checkboxen auf 10x10 vergrößert (2px Rahmen + 1px Abstand
+//          + 4x4 Check-Füllung); Checkboxen auf Seite Funktion um 2px
+//          nach links verschoben (x 34 → 32)
 //   9v17– UI: Checkbox-Rahmen von 1px auf 2px verdickt (zwei verschachtelte
 //          drawRect 8x8 und 6x6); alle Checkboxen um 1px nach oben verschoben
 //   9v16– DFPlayer-Kaltstart robuster: player.begin() in Retry-Schleife mit
@@ -67,7 +136,7 @@
 //          Stack-Größen als Kommentar dokumentiert
 
 // ── Firmware-Version ─────────────────────────────────────────
-#define FW_VERSION "9v17"                                                      // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
+#define FW_VERSION "11v05"                                                     // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
 
 // ── WiFi ─────────────────────────────────────────────────────
 // STA_SSID / STA_PSK werden nicht mehr direkt genutzt.
@@ -107,9 +176,7 @@
 // ── Setup-Timeouts (ms) ──────────────────────────────────────
 #define SETUP_WIFI_TIMEOUT_MS 30000                                            // max. Wartezeit auf WiFi-Verbindung
 #define SETUP_NTP_TIMEOUT_MS  30000                                            // max. Wartezeit auf erste NTP-Synchronisation
-#define SETUP_MP3_TIMEOUT_MS  10000                                            // max. Wartezeit auf DFPlayer Dateianzahl (Kaltstart: SD-Indizierung)
-#define DFP_INIT_TIMEOUT_MS   10000                                            // max. Wartezeit auf erfolgreiches player.begin() (Kaltstart)
-#define DFP_INIT_RETRY_MS       500                                            // Pause zwischen player.begin()-Versuchen
+#define SETUP_MP3_TIMEOUT_MS   5000                                            // max. Wartezeit auf DFPlayer Dateianzahl
 
 // ── Diagnose ─────────────────────────────────────────────────
 #define STACK_MON_INTERVAL_MS 60000UL                                          // Ausgabe-Intervall Stack-Überwachung (60 s)
@@ -124,8 +191,10 @@ const uint32_t BTN_DEBOUNCE_MS      =   30;                                    /
 const uint32_t BTN_LOCKOUT_MS       = 1000;                                    // Aktionssperre in inputTask: verhindert bewusste Doppeldrücke
 const uint32_t CUCKOO_DURATION_MS   = 7500;                                    // Kuckuck-Laufzeit
 const uint32_t AUTO_RETURN_MS       = 20000;                                   // Auto-Rückkehr zu Seite 0
+const uint32_t DISPLAY_TIMEOUT_MS   = 300000UL;                                // OLED aus nach 5 min ohne Touch-Event
 const uint32_t ALARM_POLL_MS        = 5000;                                    // Alarm-Nachlauf Prüfintervall
 const uint32_t WIFI_RECONNECT_MS    = 3000;                                    // WiFi-Reconnect Wiederholrate
+const uint32_t NVR_COMMIT_DELAY_MS  = 2000;                                    // 11v00: Ruhezeit nach letztem Event vor NVR-Commit (Flash-Wear-Schutz)
 
 // ── NVR-Zugriffsmodus ────────────────────────────────────────
 const bool ReadWrite = false;                                                  // Preferences: Lesen + Schreiben

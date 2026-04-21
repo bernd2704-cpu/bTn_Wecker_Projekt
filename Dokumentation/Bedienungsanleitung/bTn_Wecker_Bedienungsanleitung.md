@@ -1,6 +1,6 @@
 # bTn Wecker – Bedienungsanleitung
 
-*Firmware 11v04 · ESP32 / FreeRTOS*
+*Firmware 11v05 · ESP32 / FreeRTOS*
 
 ## 1. Übersicht
 
@@ -43,7 +43,7 @@ T0 wechselt die Seiten 0–6 zyklisch. S3 öffnet jederzeit die Info-Seite (Seit
 | 4 | Sound 2 wählen | T2 = Vorschau Ein/Aus  ·  T3 = Datei +  ·  T4 = Datei – |
 | 5 | Funktionen | T2 = Kuckuck    Ein/Aus<br>T3 = Licht          Ein/Aus<br>T4 = Mühlrad     Ein/Aus |
 | 6 | Kuckuck-Zeit | T3 = Von-Stunde +  ·  T4 = Bis-Stunde +<br>(0–23, Mitternacht-Überlauf möglich) |
-| 7 | Info  (S3) | Warnhinweise T0/T4, MP3-Dateianzahl, Reset-Zähler, Web-Log-Adresse (IP:8080). Details siehe Abschnitt 7. |
+| 7 | Info  (S3) | Web-Log-Adresse (IP:8080), MP3-Dateianzahl, Reset-Zähler, Warnhinweise „Taste + WiFi Reset" (T3) und „Taste – Full Reset" (T4). Details siehe Abschnitt 7. |
 
 ## 4. Alarmfunktion
 
@@ -83,17 +83,17 @@ Auf den Seiten 3 und 4 kann der Alarm-Sound vor dem Speichern angehört werden.
 
 ## 7. Info-Seite (S3)
 
-Die Info-Seite zeigt Systemdaten und bietet Zugang zu Konfigurations- und Reset-Funktionen. Seit 11v02 werden die gefährlichen Aktionen T0 und T4 explizit benannt – die früher dort zusätzlich angezeigten WiFi-/NTP-Zeitstempel sind in den Web-Log umgezogen (siehe Abschnitt 8).
+Die Info-Seite zeigt Systemdaten und bietet Zugang zu Konfigurations- und Reset-Funktionen. Seit 11v02 werden die gefährlichen Aktionen explizit als Zeilen auf der Info-Seite benannt – die früher dort zusätzlich angezeigten WiFi-/NTP-Zeitstempel sind in den Web-Log umgezogen (siehe Abschnitt 8). Ab 11v05 wurden die WLAN-Reset-Taste von T0 auf T3 verlegt und die Zeilen auf die einheitliche „+ / –"-Bedienung umgestellt (Taste + = T3, Taste – = T4).
 
 | Zeile | Inhalt |
 |---|---|
-| Kopfzeile | Firmware-Kennung (z.B. `bTn_Wecker_11v04`) |
-| T0: RESET SSID PW | Hinweis: T0 drücken löscht die WLAN-Zugangsdaten und startet den Konfigurator |
-| T4: WERKSRESET | Hinweis: T4 drücken löscht alle Einstellungen (NVS-Erase) und startet neu |
-| MP3 *nnn*   RESET *nnnn* | Anzahl gefundener MP3-Dateien  ·  Neustart-Zähler (4-stellig) |
-| IP:8080 | Adresse des Web-Log-Servers – im Browser öffnen für Diagnoseinformationen |
+| 1 – Kopfzeile | Firmware-Kennung (z.B. `bTn_Wecker_11v05`) |
+| 2 – IP:8080 | Adresse des Web-Log-Servers – im Browser öffnen für Diagnoseinformationen |
+| 3 – MP3 *nnn*   RESET *nnnn* | Anzahl gefundener MP3-Dateien  ·  Neustart-Zähler (4-stellig) |
+| 4 – Taste +  WiFi Reset | Hinweis: T3 drücken löscht die WLAN-Zugangsdaten und startet den Konfigurator |
+| 5 – Taste –  Full Reset | Hinweis: T4 drücken löscht alle Einstellungen (NVS-Erase) und startet neu |
 
-**Sicherheit:**  Ist das Display ausgeschaltet, wecken die Touch-Felder T0–T4 nur das Display – das auslösende Event wird verworfen. So kann ein blind getippter Touch auf der Info-Seite nicht versehentlich T0 (WLAN-Reset) oder T4 (Werksreset) auslösen. S3 weckt das Display und öffnet die Info-Seite direkt (11v04); die Auto-Rückkehr nach 20 s Inaktivität stellt sicher, dass das Display nur von Seite 0 aus abschaltet, der S3-Aufruf also reproduzierbar zur Info-Seite führt.
+**Sicherheit:**  Ist das Display ausgeschaltet, wecken die Touch-Felder T0–T4 nur das Display – das auslösende Event wird verworfen. So kann ein blind getippter Touch auf der Info-Seite nicht versehentlich T3 (WLAN-Reset, seit 11v05; vorher T0) oder T4 (Werksreset) auslösen. S3 weckt das Display und öffnet die Info-Seite direkt (11v04); die Auto-Rückkehr nach 20 s Inaktivität stellt sicher, dass das Display nur von Seite 0 aus abschaltet, der S3-Aufruf also reproduzierbar zur Info-Seite führt.
 
 ## 8. Web-Log (http://IP:8080)
 
@@ -119,7 +119,7 @@ Nach der WiFi-Verbindung ist ein Diagnose-Server erreichbar. Die IP-Adresse wird
 
 **Erstkonfiguration:**  Beim ersten Start (oder nach Werksreset) öffnet der Wecker automatisch einen WLAN-Accesspoint mit der SSID `bTn-Wecker`. Mit Smartphone oder PC verbinden, Browser öffnen und `192.168.4.1` aufrufen. SSID und Passwort eingeben und speichern – der Wecker startet neu und verbindet sich.
 
-**Neue WLAN-Konfiguration:**  Info-Seite (S3) öffnen → T0 drücken. WLAN-Zugangsdaten werden gelöscht und der Konfigurator startet.
+**Neue WLAN-Konfiguration:**  Info-Seite (S3) öffnen → T3 (Taste +) drücken. WLAN-Zugangsdaten werden gelöscht und der Konfigurator startet. *(Bis 11v04 lag diese Funktion auf T0; seit 11v05 einheitlich T3, analog zur „Taste –"-Belegung des Werksresets auf T4.)*
 
 | Feld | Regel |
 |---|---|
@@ -135,4 +135,4 @@ Info-Seite (S3) öffnen → T4 drücken. Alle gespeicherten Einstellungen (Alarm
 
 ---
 
-*bTn Wecker  ·  Bedienungsanleitung  ·  Firmware 11v04*
+*bTn Wecker  ·  Bedienungsanleitung  ·  Firmware 11v05*

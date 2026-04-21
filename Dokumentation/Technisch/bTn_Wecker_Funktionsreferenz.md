@@ -1,6 +1,6 @@
 # bTn Wecker – Funktions- und Task-Referenz
 
-*Firmware 11v04 · ESP32 / FreeRTOS*
+*Firmware 11v05 · ESP32 / FreeRTOS*
 
 ## 1. FreeRTOS Tasks
 
@@ -50,7 +50,7 @@ Zwei-Stufen-Debouncing: ISR-Ebene BTN_DEBOUNCE_MS=30ms, Task-Ebene BTN_LOCKOUT_M
 | onSound2(evt) | UI-Handler | Seite 4: analog onSound1 für Alarm 2. |
 | onFuncs(evt) | UI-Handler | Seite 5: T2=Kuckuck, T3=Licht, T4=Mühlrad – je toggle. |
 | onCuckooTime(evt) | UI-Handler | Seite 6: T3=cuckoo_onTime+, T4=cuckoo_offTime+ (0–23 mit Überlauf). |
-| onInfo(evt) | UI-Handler | Info (S3): T0=WiFi-Konfigurator, T4=Werksreset. Zeile 54: IP:Port des Web-Log-Servers. |
+| onInfo(evt) | UI-Handler | Info (S3): T3=WiFi-Konfigurator (seit 11v05, vorher T0), T4=Werksreset. T0 wird in `uiDispatch()` weiterhin per `s != UI_INFO`-Guard ignoriert (Out-of-Bounds-Schutz für `cycle[]`). Info-Seite zeigt Z1 Version, Z2 Web-Log-URL (IP:8080), Z3 MP3/Reset-Zähler, Z4 „Taste +  WiFi Reset", Z5 „ Taste –  Full Reset". |
 
 ## 5. Web-Logger
 
@@ -96,4 +96,4 @@ Zwei-Stufen-Debouncing: ISR-Ebene BTN_DEBOUNCE_MS=30ms, Task-Ebene BTN_LOCKOUT_M
 
 ---
 
-*bTn Wecker · Funktionsreferenz · Firmware 11v04*
+*bTn Wecker · Funktionsreferenz · Firmware 11v05*

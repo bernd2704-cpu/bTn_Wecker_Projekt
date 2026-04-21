@@ -2,7 +2,7 @@
 
 Änderungshistorie
 
-Basis 4v1  →  11v04
+Basis 4v1  →  11v05
 
 ## Kategorien
 
@@ -156,4 +156,12 @@ Basis 4v1  →  11v04
 |---|---|---|
 | 11v04 | Funktion | S3 bei dunklem Display: Display einschalten UND Info-Seite öffnen (vorher seit 11v02 reines Wake+Discard). Implementiert in `inputTask` – Wake-Pfad für EVT_S3 setzt kein `continue`, Event fließt weiter zu `uiDispatch()`. Auto-Return (20 s) garantiert deterministisches Landen auf UI_INFO. Touch T0–T4 bleiben Wake+Discard (Reset-Schutz). |
 
-bTn Wecker  ·  Änderungshistorie  ·  Stand 11v04
+## Version 11v05
+
+| Version | Kategorie | Änderung |
+|---|---|---|
+| 11v05 | Funktion | UI_INFO: WLAN-Reset von T0 auf T3 verlegt – einheitliche Bedienung „Taste +" (T3) und „Taste –" (T4) analog zur Kuckuck-Seite. `onInfo()` reagiert jetzt auf EVT_T3 statt EVT_T0; EVT_T4 (Werksreset) unverändert. Der bestehende `s != UI_INFO`-Guard für T0 in `uiDispatch()` bleibt als Out-of-Bounds-Schutz für `cycle[]` (UI_INFO=7 wäre sonst außerhalb des 7-Einträge-Arrays) – T0 auf INFO ist seit 11v05 ohne Funktion. |
+| 11v05 | Funktion | UI_INFO-Layout neu: Z1 Firmware-Kennung, Z2 Web-Log-Adresse (vorher Z5), Z3 MP3-/Reset-Zähler (vorher Z4), Z4 „Taste +  WiFi Reset", Z5 „ Taste –  Full Reset". Die früheren Hinweiszeilen „T0: RESET SSID PW" und „T4: WERKSRESET" (seit 11v02) entfallen zugunsten der symmetrischen +/–-Darstellung. |
+| 11v05 | Qualität | Wake-Discard-Kommentar (`inputTask` bei `displayBlanked`) auf T3/T4 als gefährliche Aktionen angepasst. State-Machine-Diagramm, `runWifiConfigServer()`-Kommentar und `setup()`-Block-Kommentar zur WiFi-Konfig-Anforderung auf T3 nachgezogen. |
+
+bTn Wecker  ·  Änderungshistorie  ·  Stand 11v05

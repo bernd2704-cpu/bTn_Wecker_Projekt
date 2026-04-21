@@ -1,6 +1,6 @@
 # bTn Wecker – State Machines
 
-*Firmware 11v01 · Mermaid-Diagramme (aus `bTn_Wecker_StateMachines.pptx`)*
+*Firmware 11v05 · Mermaid-Diagramme (aus `bTn_Wecker_StateMachines.pptx`)*
 
 ---
 
@@ -94,7 +94,7 @@ stateDiagram-v2
     UI_CUCKOO --> UI_INFO : S3
     UI_INFO   --> UI_CLOCK : S3
 
-    UI_INFO --> UI_INFO : T0 → WiFi-Konfigurator<br/>(clearWifiCredentials + restart)
+    UI_INFO --> UI_INFO : T3 → WiFi-Konfigurator<br/>(clearWifiCredentials + restart)
     UI_INFO --> UI_INFO : T4 → Werksreset<br/>(nvs_flash_erase + restart)
 
     UI_ALARM1 --> UI_CLOCK : AUTO_RETURN_MS (20 s) ohne Touch
@@ -126,4 +126,4 @@ stateDiagram-v2
 
 ---
 
-*bTn Wecker · State Machines · Firmware 11v01*
+*bTn Wecker · State Machines · Firmware 11v05*

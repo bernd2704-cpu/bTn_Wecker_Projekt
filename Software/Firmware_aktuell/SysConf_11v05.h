@@ -1,10 +1,17 @@
 #pragma once
-// SysConf_11v04.h – Konfigurationskonstanten für bTn Wecker
-// Firmware-Version : 11v04
-// Datei-Version    : 11v04
+// SysConf_11v05.h – Konfigurationskonstanten für bTn Wecker
+// Firmware-Version : 11v05
+// Datei-Version    : 11v05
 // Boardverwalter   : esp32 3.3.8 von Espressif Systems
 //
 // Änderungshistorie:
+//   11v05–Info-Seite: WLAN-Reset von T0 auf T3 verlegt – einheitliche
+//         Bedienung (Taste + = T3 = WLAN-Reset, Taste - = T4 = Werksreset).
+//         Info-Seite neu angeordnet: Z1 Versionsstring, Z2 Web-Log-Adresse,
+//         Z3 MP3-/Reset-Zähler, Z4 "Taste +  WiFi Reset", Z5 " Taste -  Full
+//         Reset". T0 auf UI_INFO bleibt wirkungslos (Seitencycle weiter
+//         durch `s != UI_INFO`-Guard geschützt), onInfo() reagiert jetzt
+//         auf EVT_T3 statt EVT_T0. Wake-Discard-Kommentar nachgezogen.
 //   11v04–S3 bei dunklem Display: Display einschalten UND Info-Seite öffnen.
 //         Ändert das 11v02-Verhalten (reines Wake+Discard) zurück zu einem
 //         kombinierten Wake+Open. Touch T0–T4 bleiben reines Wake+Discard –
@@ -129,7 +136,7 @@
 //          Stack-Größen als Kommentar dokumentiert
 
 // ── Firmware-Version ─────────────────────────────────────────
-#define FW_VERSION "11v04"                                                     // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
+#define FW_VERSION "11v05"                                                     // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
 
 // ── WiFi ─────────────────────────────────────────────────────
 // STA_SSID / STA_PSK werden nicht mehr direkt genutzt.

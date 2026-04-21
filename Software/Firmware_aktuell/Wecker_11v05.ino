@@ -609,8 +609,10 @@ void menu(uint8_t page) {   // uint8_t: Koordinatenbereich 0–7 entspricht UiSt
       zeigeZ10L(28, 28, str_mp3);
       zeigeZ10C(78, 28, "RESET");
       zeigeZ10R(127,28, str_reset);                                                      // rechtsbündig
-      zeigeZ10L(1,  40, "Taste +  WiFi Reset");                                          // Z4: T3 löst WLAN-Konfig aus
-      zeigeZ10L(1,  54, " Taste -  Full Reset");                                         // Z5: T4 löst Werksreset aus
+      zeigeZ10L(1,   40, "Taste +");                                                    // Z4: T3 löst WLAN-Konfig aus
+      zeigeZ10R(127, 40, "WiFi RESET");
+      zeigeZ10L(1,   54, "Taste -");                                                    // Z5: T4 löst Werksreset aus
+      zeigeZ10R(127, 54, "Werks-RESET");
       break;
   }
   display.display();                                                                     // einmaliger Flush nach vollständiger Seitenzeichnung

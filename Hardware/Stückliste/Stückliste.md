@@ -17,3 +17,4 @@
 | DFPlayer Mini                  | DFRobot              | DFR0299                        | AZ-Delivery          |     2,10 € |
 | Micro SD-Card 32GB             | Lexar                | LMSESXX032G-B2AEU              | Amazon               |    14,00 € |
 | Lautsprecher                   | Visatone             | FRWS 4 ND Breitband 8 Ohm      | Voelkner             |    16,89 € |
+| LDO Spannungsregler 1,5V       | Microchip            | MCP1700T-1502E/MB              | darius GmbH          |     2,10 € |

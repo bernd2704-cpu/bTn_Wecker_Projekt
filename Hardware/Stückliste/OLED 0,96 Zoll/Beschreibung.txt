@@ -1,0 +1,37 @@
+Produktbeschreibungen
+0,96 Zoll OLED Display I2C Chip 128 x 64 Pixel I2C Bildschirm Anzeigemodul mit Weiß Zeichen,kompatibel mit Arduino,4 Pin
+
+Größe: 0,96
+Auflösung: 128X64
+Farbe weiß
+Großer Betrachtungswinkel: mehr als 160 Grad
+Unterstützte Plattformen: 51-Serie, 430-Serie, STIM32/2, SCR-Chips
+Extrem geringer Stromverbrauch: 0,04 W im Normalbetrieb
+Unterstützter Spannungsbereich: 3,3 V–5 V DC
+Arbeitstemperatur: -30–80 Grad
+
+Kommunikation: IIC, nur zwei I/O-Ports
+Keine Schriftart: Die Software verwendet Word-Modulo
+Hintergrundbeleuchtung: OLED selbstleuchtend, keine Hintergrundbeleuchtung
+
+Schnittstelle:
+Volumen: 28,7 mm * 27,8 mm * 4,1 mm
+VCC: 3,3–5 V
+GND: Masse
+SCL: Serielle Uhr
+SDA: Serielle Daten
+
+Wie verbinde ich mich?
+GND: Gleichstrom negativ
+VCC: Gleichstrom positiv
+SCL: Serieller Takteingang
+SDA: Serielle Dateneingabe
+
+Anwendungen:
+
+MP3, MP4, Uhr; Head-Mounted-Displays
+Messgeräte und andere intelligente Instrumente
+Entwerfen Sie hübsche Muster für Ihre geliebten elektronischen Geräte!
+
+Lieferinhalt:
+3 * 0,96 Zoll I2C OLED-Display Anzeigemodul

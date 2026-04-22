@@ -2,9 +2,10 @@
 
 ## 1. Mechanik
 
-| Bauteil            | Hersteller | Artikel                   | Lieferant   |   Preis |
-| ------------------ | ---------- | ------------------------- | ----------- | ------: |
-| Cuckoo Clock       | ROKR       | LC901C                    | Amazon      | 59,45 € |
+| Bauteil              | Hersteller | Artikel                   | Lieferant   |   Preis |
+| -------------------- | ---------- | ------------------------- | ----------- | ------: |
+| Cuckoo Clock         | ROKR       | LC901C                    | Amazon      | 59,45 € |
+| Getriebemotor 6mm 3V | Garosa     | B085NG5ZCY 4-fach         | Amazon      |  9,89 € |
 
 ## 2. Elektronik
 

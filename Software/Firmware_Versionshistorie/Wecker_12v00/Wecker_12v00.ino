@@ -60,7 +60,7 @@
 #include <esp_task_wdt.h>             // ESP32 Hardware Task Watchdog Timer (TWDT)
 
 // ── Konfiguration ────────────────────────────────────────────
-#include "SysConf_11v05.h"                                                               // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
+#include "SysConf_12v00.h"                                                               // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
 #include "WEB.h"
 
 const char PGMInfo[] = "bTn_Wecker_" FW_VERSION;                                          // PROGMEM-fähig; kein String-Heap-Fragment
@@ -1158,7 +1158,7 @@ static void runAlarmMachine(uint8_t sec, uint8_t min, uint8_t hour) {
           player.playFolder(1, sound1_assigned);
           xSemaphoreGive(playerMutex);
           lastA1Min = min;                                                               // erst nach erfolgreichem Start sperren
-          if (wheel_on) { digitalWrite(E2, HIGH); }
+          if (wheel_on) { ledcWrite(E2, MOTOR_PWM_DUTY); }                                // 12v00: Motor via PWM (60 % Duty ≙ ~3 V)
           if (light_on) { digitalWrite(E3, HIGH); }
           t_start6   = millis();
           alarmState = ALARM_RUNNING;                                                    // → ALARM_RUNNING
@@ -1172,7 +1172,7 @@ static void runAlarmMachine(uint8_t sec, uint8_t min, uint8_t hour) {
           player.playFolder(1, sound2_assigned);
           xSemaphoreGive(playerMutex);
           lastA2Min = min;                                                               // erst nach erfolgreichem Start sperren
-          if (wheel_on) { digitalWrite(E2, HIGH); }
+          if (wheel_on) { ledcWrite(E2, MOTOR_PWM_DUTY); }                                // 12v00: Motor via PWM
           if (light_on) { digitalWrite(E3, HIGH); }
           t_start6   = millis();
           alarmState = ALARM_RUNNING;                                                    // → ALARM_RUNNING
@@ -1196,7 +1196,7 @@ static void runAlarmMachine(uint8_t sec, uint8_t min, uint8_t hour) {
         playerStatus = st;
         t_start6 = millis();
         if (playerStatus == 0) {                                                         // MP3 beendet (0=stopped; -1=UART-Timeout → Alarm läuft weiter)
-          if (wheel_on) { digitalWrite(E2, LOW); }
+          if (wheel_on) { ledcWrite(E2, 0); }                                             // 12v00: Motor-PWM abschalten
           if (light_on) { digitalWrite(E3, LOW); }
           lastA1Min  = 0xFF;                                                             // Sperre aufheben → nächster Alarm möglich
           lastA2Min  = 0xFF;
@@ -1484,7 +1484,7 @@ static void inputTask(void *pvParam) {
             player.stop();
             xSemaphoreGive(playerMutex);
           }
-          digitalWrite(E2, LOW);
+          ledcWrite(E2, 0);                                                              // 12v00: Motor-PWM abschalten (war digitalWrite LOW)
           digitalWrite(E3, LOW);
           alarmState = ALARM_IDLE;
           lastA1Min  = 0xFF;                                                             // Sperren aufheben → Alarm in gleicher Minute neu auslösbar
@@ -1518,10 +1518,10 @@ static void inputTask(void *pvParam) {
         lastBtnMs[1] = t_now;
         S2_SW = !S2_SW;
         if (S2_SW) {
-          if (wheel_on) { digitalWrite(E2, HIGH); }
+          if (wheel_on) { ledcWrite(E2, MOTOR_PWM_DUTY); }                                // 12v00: Motor via PWM
           if (light_on) { digitalWrite(E3, HIGH); }
         } else {
-          digitalWrite(E2, LOW);
+          ledcWrite(E2, 0);                                                               // 12v00: Motor-PWM abschalten
           digitalWrite(E3, LOW);
         }
       }
@@ -2099,7 +2099,12 @@ void setup() {
   pinMode(S2, INPUT_PULLUP);
   pinMode(S3, INPUT_PULLUP);
   pinMode(E1, OUTPUT);
-  pinMode(E2, OUTPUT);
+  // 12v00: E2 (Motor) wird per LEDC-PWM angesteuert – ledcAttach konfiguriert
+  // den Pin als Ausgang und ordnet ihn einem LEDC-Kanal zu; pinMode entfällt.
+  // MOSFET-Gate hat einen 10 kΩ Pull-Down, also bleibt der Motor während der
+  // kurzen Boot-Phase vor ledcAttach sicher aus.
+  ledcAttach(E2, MOTOR_PWM_FREQ, MOTOR_PWM_RES);
+  ledcWrite(E2, 0);                                                                      // definierter Startzustand: Motor aus
   pinMode(E3, OUTPUT);
 
   // ── FreeRTOS Objekte ─────────────────────────────────────
@@ -2196,7 +2201,7 @@ void setup() {
   // Timeout WDT_HARDWARE_MS kürzer als Software-Watchdog WDG_TIMEOUT_MS:
   // Hardware greift bei echtem CPU-Lock, Software bei logischem Freeze.
   const esp_task_wdt_config_t twdt_cfg = {
-    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_11v05.h
+    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_12v00.h
     .idle_core_mask = 0,               // Idle-Tasks nicht überwachen
     .trigger_panic  = true,            // Backtrace + Reset bei Ablauf
   };

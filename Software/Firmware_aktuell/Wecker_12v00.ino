@@ -16,7 +16,8 @@
 //  T0 (von UI_CUCKOO_TIME) ──────────────▶ UI_CLOCK
 //  S3 (beliebig) ─────────────────────────▶ UI_INFO
 //  S3 (von INFO) ──────────────────────────▶ UI_CLOCK
-//  T0 (von INFO) ──────────────────────────▶ WiFi-Konfigurator
+//  T3 (von INFO) ──────────────────────────▶ WiFi-Konfigurator  (11v05)
+//  T4 (von INFO) ──────────────────────────▶ Werksreset
 //
 //  Alarm-State-Machine  (alarmTask)
 //  ALARM_IDLE ──── Alarmzeit erreicht ──▶ ALARM_RUNNING
@@ -59,7 +60,7 @@
 #include <esp_task_wdt.h>             // ESP32 Hardware Task Watchdog Timer (TWDT)
 
 // ── Konfiguration ────────────────────────────────────────────
-#include "SysConf_11v00.h"                                                               // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
+#include "SysConf_12v00.h"                                                               // Pin-Belegung, Timing-Konstanten, Touch-Schwellwerte
 #include "WEB.h"
 
 const char PGMInfo[] = "bTn_Wecker_" FW_VERSION;                                          // PROGMEM-fähig; kein String-Heap-Fragment
@@ -600,23 +601,18 @@ void menu(uint8_t page) {   // uint8_t: Koordinatenbereich 0–7 entspricht UiSt
     case 7:
       display.clear();
       zeigeZ10C(63, 0, PGMInfo);
-      zeigeZ10L(1,  16, "WiFi");
-      zeigeZ10L(28, 16, datum_WiFi);
-      zeigeZ10L(82, 16, zeit_WiFi);
-      zeigeZ10L(1,  28, "NTP");
-      zeigeZ10L(28, 28, datum_sync);
-      zeigeZ10L(82, 28, zeit_sync);
-      zeigeZ10L(1,  40, "MP3");
-      zeigeZ10L(28, 40, str_mp3);
-      zeigeZ10C(78,  40, "RESET");
-      zeigeZ10R(127, 40, str_reset);                                                     // rechtsbündig
       { char webLogUrl[24];
         snprintf(webLogUrl, sizeof(webLogUrl), "%s:%u",
                  WiFi.localIP().toString().c_str(), (unsigned)WEBLOG_PORT);
-        zeigeZ10C(63,  54, webLogUrl); }    // Web-Log-Adresse anzeigen
-      // Hinweis: T0 drücken startet WiFi-Konfigurator
-      // (wird unterhalb der Box angezeigt, blinkt nicht – statisch)
-      // T4 löst Werksreset aus (NVS löschen + Neustart)
+        zeigeZ10C(63, 16, webLogUrl); }    // Z2: Web-Log-Adresse
+      zeigeZ10L(1,  28, "MP3");             // Z3: MP3-Dateianzahl + Reset-Zähler
+      zeigeZ10L(28, 28, str_mp3);
+      zeigeZ10C(78, 28, "RESET");
+      zeigeZ10R(127,28, str_reset);                                                      // rechtsbündig
+      zeigeZ10L(1,   40, "Taste +");                                                    // Z4: T3 löst WLAN-Konfig aus
+      zeigeZ10R(127, 40, "WiFi RESET");
+      zeigeZ10L(1,   54, "Taste -");                                                    // Z5: T4 löst Werksreset aus
+      zeigeZ10R(127, 54, "Werks-RESET");
       break;
   }
   display.display();                                                                     // einmaliger Flush nach vollständiger Seitenzeichnung
@@ -676,11 +672,14 @@ void readNVR() {
 }
 
 // 9v14: Reset-Zähler in eigener Funktion – readNVR() ist jetzt seiteneffektfrei.
-// Muss innerhalb einer offenen data.begin()/end()-Session aus setup() aufgerufen werden.
+// 11v03: öffnet NVR-Namespace selbst (begin/end), wird erst NACH loadWifiCredentials()
+//        aufgerufen – so zählt ein Werksreset-Folgeboot in den WiFi-Konfigurator nicht mit.
 void bumpResetCount() {
+  data.begin("varSafe", ReadWrite);
   resetCount = data.getUInt("resetCount", 0);
   resetCount++;                                                                          // Neustart zählen
   data.putUInt("resetCount", resetCount);
+  data.end();
 }
 
 
@@ -694,7 +693,7 @@ void bumpResetCount() {
 //
 //  runWifiConfigServer()
 //    Wird beim ersten Start (kein "wifiCfg"-Eintrag) oder auf
-//    Anforderung (T0 auf Info-Seite) aufgerufen – VOR dem Start
+//    Anforderung (T3 auf Info-Seite, 11v05) aufgerufen – VOR dem Start
 //    der FreeRTOS-Tasks, da er die Arduino-loop-Ebene blockiert.
 //    ESP32 öffnet Access Point WIFI_AP_SSID ("bTn-Wecker"),
 //    startet WebServer auf Port 80.
@@ -1062,16 +1061,16 @@ static UiState onCuckooTime(uint8_t evt) {
 static volatile bool wifiConfigRequested  = false;
 static volatile bool factoryResetRequested = false;  // T4 auf UI_INFO → NVS löschen + Neustart
 
-// — UI_INFO: T0 → WiFi-Konfig-Modus; T4 → Werksreset; andere ignoriert ──
+// — UI_INFO: T3 → WiFi-Konfig-Modus (11v05, vorher T0); T4 → Werksreset; andere ignoriert ──
 static UiState onInfo(uint8_t evt) {
-  if (evt == EVT_T0) {
+  if (evt == EVT_T3) {
     clearWifiCredentials();                                                               // NVR-Flag löschen
     wifiConfigRequested = true;                                                          // inputTask führt Neustart durch
   }
   if (evt == EVT_T4) {
     factoryResetRequested = true;                                                        // inputTask: NVS löschen + Neustart
   }
-  return UI_INFO;                                                                        // Nur S3/T0 verlässt Info
+  return UI_INFO;                                                                        // Nur S3 verlässt Info (T3/T4 lösen Neustart)
 }
 
 // ── Haupt-Dispatcher ─────────────────────────────────────────
@@ -1080,7 +1079,9 @@ static UiState onInfo(uint8_t evt) {
 static UiState uiDispatch(UiState s, uint8_t evt) {
 
   // ── T0: Seitenwechsel (globaler Zyklus, State-unabhängig) ──
-  // Ausnahme: T0 auf UI_INFO wird von onInfo() behandelt (→ WiFi-Konfig)
+  // Ausnahme: T0 auf UI_INFO wird ignoriert (cycle[] hat nur 7 Einträge,
+  // UI_INFO=7 wäre Out-of-Bounds; seit 11v05 ist T0 auf INFO zudem ohne Funktion,
+  // der WLAN-Reset liegt nun auf T3 – siehe onInfo()).
   if (evt == EVT_T0 && s != UI_INFO) {
     static const UiState cycle[] = {
       UI_ALARM1,       // von UI_CLOCK
@@ -1157,7 +1158,7 @@ static void runAlarmMachine(uint8_t sec, uint8_t min, uint8_t hour) {
           player.playFolder(1, sound1_assigned);
           xSemaphoreGive(playerMutex);
           lastA1Min = min;                                                               // erst nach erfolgreichem Start sperren
-          if (wheel_on) { digitalWrite(E2, HIGH); }
+          if (wheel_on) { ledcWrite(E2, MOTOR_PWM_DUTY); }                                // 12v00: Motor via PWM (60 % Duty ≙ ~3 V)
           if (light_on) { digitalWrite(E3, HIGH); }
           t_start6   = millis();
           alarmState = ALARM_RUNNING;                                                    // → ALARM_RUNNING
@@ -1171,7 +1172,7 @@ static void runAlarmMachine(uint8_t sec, uint8_t min, uint8_t hour) {
           player.playFolder(1, sound2_assigned);
           xSemaphoreGive(playerMutex);
           lastA2Min = min;                                                               // erst nach erfolgreichem Start sperren
-          if (wheel_on) { digitalWrite(E2, HIGH); }
+          if (wheel_on) { ledcWrite(E2, MOTOR_PWM_DUTY); }                                // 12v00: Motor via PWM
           if (light_on) { digitalWrite(E3, HIGH); }
           t_start6   = millis();
           alarmState = ALARM_RUNNING;                                                    // → ALARM_RUNNING
@@ -1195,7 +1196,7 @@ static void runAlarmMachine(uint8_t sec, uint8_t min, uint8_t hour) {
         playerStatus = st;
         t_start6 = millis();
         if (playerStatus == 0) {                                                         // MP3 beendet (0=stopped; -1=UART-Timeout → Alarm läuft weiter)
-          if (wheel_on) { digitalWrite(E2, LOW); }
+          if (wheel_on) { ledcWrite(E2, 0); }                                             // 12v00: Motor-PWM abschalten
           if (light_on) { digitalWrite(E3, LOW); }
           lastA1Min  = 0xFF;                                                             // Sperre aufheben → nächster Alarm möglich
           lastA2Min  = 0xFF;
@@ -1424,8 +1425,15 @@ static void inputTask(void *pvParam) {
     // ── 10v00: Display abgeschaltet → Touch weckt, Event wird verworfen ──
     // Spec: Berührung eines Touchpads schaltet Display erneut für
     // DISPLAY_TIMEOUT_MS (5 min, seit 10v02) ein; andere Touch-Funktionen
-    // sind nur bei eingeschaltetem Display aktiv. Hardware-Taster S1/S2/S3
+    // sind nur bei eingeschaltetem Display aktiv. Hardware-Taster S1/S2
     // arbeiten unabhängig weiter.
+    // 11v04: S3 weckt das Display UND öffnet die Info-Seite (Event bleibt
+    // erhalten). Auto-Return (20 s) garantiert, dass das Display nur von
+    // UI_CLOCK aus blanken kann – der S3-Toggle in uiDispatch() landet also
+    // deterministisch auf UI_INFO. Touch T0–T4 bleiben reines Wake+Discard,
+    // um T3 (WLAN-Reset, seit 11v05) / T4 (Werksreset) auf der Info-Seite
+    // nicht versehentlich auszulösen, wenn der Nutzer blind auf das dunkle
+    // Display tippt.
     if (displayBlanked && evt <= EVT_T4) {
       if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         display.displayOn();
@@ -1433,7 +1441,16 @@ static void inputTask(void *pvParam) {
         xSemaphoreGive(displayMutex);
       }
       lastTouchMs = millis();                                                            // DISPLAY_TIMEOUT_MS-Timer neu starten
-      continue;                                                                          // Touch-Event nicht an State-Machine weitergeben
+      continue;                                                                          // Wake-Event nicht an State-Machine weitergeben
+    }
+    if (displayBlanked && evt == EVT_S3) {
+      if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        display.displayOn();
+        displayBlanked = false;
+        xSemaphoreGive(displayMutex);
+      }
+      lastTouchMs = millis();                                                            // DISPLAY_TIMEOUT_MS-Timer neu starten
+      // KEIN continue – S3 läuft weiter zur State-Machine → Info-Seite
     }
 
     // ── S1: Alarm/Sound stoppen oder Kuckuck einmalig ───────────
@@ -1467,7 +1484,7 @@ static void inputTask(void *pvParam) {
             player.stop();
             xSemaphoreGive(playerMutex);
           }
-          digitalWrite(E2, LOW);
+          ledcWrite(E2, 0);                                                              // 12v00: Motor-PWM abschalten (war digitalWrite LOW)
           digitalWrite(E3, LOW);
           alarmState = ALARM_IDLE;
           lastA1Min  = 0xFF;                                                             // Sperren aufheben → Alarm in gleicher Minute neu auslösbar
@@ -1501,10 +1518,10 @@ static void inputTask(void *pvParam) {
         lastBtnMs[1] = t_now;
         S2_SW = !S2_SW;
         if (S2_SW) {
-          if (wheel_on) { digitalWrite(E2, HIGH); }
+          if (wheel_on) { ledcWrite(E2, MOTOR_PWM_DUTY); }                                // 12v00: Motor via PWM
           if (light_on) { digitalWrite(E3, HIGH); }
         } else {
-          digitalWrite(E2, LOW);
+          ledcWrite(E2, 0);                                                               // 12v00: Motor-PWM abschalten
           digitalWrite(E3, LOW);
         }
       }
@@ -1532,7 +1549,7 @@ static void inputTask(void *pvParam) {
 
     xSemaphoreGive(displayMutex);
 
-    // ── WiFi-Konfig angefordert (von onInfo/EVT_T0) ───────────
+    // ── WiFi-Konfig angefordert (von onInfo/EVT_T3, 11v05) ───
     // Mutex erneut holen – displayTask könnte sonst dazwischenfunken.
     // vTaskDelay liegt bewusst AUSSERHALB des Mutex-Blocks.
     if (wifiConfigRequested) {
@@ -1873,6 +1890,20 @@ static void webLogTask(void *pvParam) {
     }
     html += "</div>";
 
+    // ── Verbindung: letzter Restart (WiFi + NTP analog Info-Seite) ─
+    {
+      String wDate = strlen(datum_WiFi) > 0 ? String(datum_WiFi) : String("–");
+      String wTime = strlen(zeit_WiFi)  > 0 ? String(zeit_WiFi)  : String("–");
+      String nDate = strlen(datum_sync) > 0 ? String(datum_sync) : String("–");
+      String nTime = strlen(zeit_sync)  > 0 ? String(zeit_sync)  : String("–");
+      html += "<div class='snap-wrap'>"
+              "<div class='snap-title'>Verbindung &ndash; letzter WiFi Reconnect / NTP Sync</div>"
+              "<div class='snap-box'>"
+              "  WiFi  " + wDate + "  " + wTime + "\n"
+              "  NTP   " + nDate + "  " + nTime +
+              "</div></div>";
+    }
+
     // ── Snapshot: Touch Baseline + Stack HWM ─────────────────
     if (webLogMutex && xSemaphoreTake(webLogMutex, pdMS_TO_TICKS(200)) == pdTRUE) {
       String touchTime = String(snapTouchTime);
@@ -1964,8 +1995,8 @@ void setup() {
     data.putBool("state", true); // Erststart-Flag dauerhaft setzen
     writeNVR();
   }
-  bumpResetCount();                                                                      // 9v14: Reset-Zähler als separater Schritt
   data.end();
+  // bumpResetCount() folgt bewusst erst nach loadWifiCredentials() – siehe dort.
 
   // ── webLogMutex früh initialisieren: setup()-Meldungen puffern ─
   webLogMutex = xSemaphoreCreateMutex();
@@ -1979,12 +2010,16 @@ void setup() {
   display.display();                                                                   // Versionsstring anzeigen
 
   // ── WiFi-Credentials aus NVR laden ───────────────────────
-  // Erster Start oder NVR-Flag gelöscht (z.B. via T0 auf Info):
+  // Erster Start oder NVR-Flag gelöscht (z.B. via T3 auf Info, 11v05):
   // → WiFi-Konfigurator starten (blockiert bis Neustart).
   if (!loadWifiCredentials()) {
     Serial.println("[WiFi-Config] Keine Zugangsdaten – starte Konfigurator");
     runWifiConfigServer();   // kehrt nicht zurück (ESP.restart am Ende)
   }
+  // 11v03: erst JETZT zählen – der Konfigurator-Boot nach Werksreset (NVS leer,
+  // loadWifiCredentials() false → ESP.restart in runWifiConfigServer) wird damit
+  // übersprungen. Der nachfolgende reguläre Boot landet sauber auf resetCount=1.
+  bumpResetCount();
   webLogf("[WiFi] Credentials geladen: SSID=%s", sta_ssid);
 
   // ── NTP ──────────────────────────────────────────────────
@@ -2064,7 +2099,12 @@ void setup() {
   pinMode(S2, INPUT_PULLUP);
   pinMode(S3, INPUT_PULLUP);
   pinMode(E1, OUTPUT);
-  pinMode(E2, OUTPUT);
+  // 12v00: E2 (Motor) wird per LEDC-PWM angesteuert – ledcAttach konfiguriert
+  // den Pin als Ausgang und ordnet ihn einem LEDC-Kanal zu; pinMode entfällt.
+  // MOSFET-Gate hat einen 10 kΩ Pull-Down, also bleibt der Motor während der
+  // kurzen Boot-Phase vor ledcAttach sicher aus.
+  ledcAttach(E2, MOTOR_PWM_FREQ, MOTOR_PWM_RES);
+  ledcWrite(E2, 0);                                                                      // definierter Startzustand: Motor aus
   pinMode(E3, OUTPUT);
 
   // ── FreeRTOS Objekte ─────────────────────────────────────
@@ -2161,7 +2201,7 @@ void setup() {
   // Timeout WDT_HARDWARE_MS kürzer als Software-Watchdog WDG_TIMEOUT_MS:
   // Hardware greift bei echtem CPU-Lock, Software bei logischem Freeze.
   const esp_task_wdt_config_t twdt_cfg = {
-    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_11v00.h
+    .timeout_ms    = WDT_HARDWARE_MS,  // aus SysConf_12v00.h
     .idle_core_mask = 0,               // Idle-Tasks nicht überwachen
     .trigger_panic  = true,            // Backtrace + Reset bei Ablauf
   };

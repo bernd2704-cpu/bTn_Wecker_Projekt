@@ -1,10 +1,27 @@
 #pragma once
-// SysConf_11v05.h – Konfigurationskonstanten für bTn Wecker
-// Firmware-Version : 11v05
-// Datei-Version    : 11v05
+// SysConf_12v00.h – Konfigurationskonstanten für bTn Wecker
+// Firmware-Version : 12v00
+// Datei-Version    : 12v00
 // Boardverwalter   : esp32 3.3.8 von Espressif Systems
 //
 // Änderungshistorie:
+//   12v00–Hardware-Erweiterung "Motor + LED-Streifen" (siehe
+//         Hardware/hardware_notesmotor_led_driver.md):
+//         (1) E2 (GPIO26, Wasserrad-Motor) wird jetzt per PWM über
+//             LEDC betrieben – 20 kHz / 8 Bit / 60 % Duty (=153),
+//             um den 3-V-Motor an 5 V mit Mittelwert ~3 V zu treiben
+//             ohne hörbares Schaltgeräusch. Ansteuerung in alarmTask
+//             und S2-Zugschalter auf ledcWrite(E2, MOTOR_PWM_DUTY / 0)
+//             umgestellt. pinMode(E2,OUTPUT) in setup() entfällt –
+//             ledcAttach übernimmt die Pinkonfiguration.
+//         (2) E3 (GPIO27, LED-Streifen) bleibt digitalWrite(HIGH/LOW):
+//             ohmsche Last mit Vorwiderstand 47 Ω (48 mA bei 5 V),
+//             kein PWM erforderlich (siehe hardware_notes).
+//         (3) Neue Konstanten MOTOR_PWM_FREQ / MOTOR_PWM_RES /
+//             MOTOR_PWM_DUTY – zentral änderbar analog zu STACK_*.
+//         (4) Beide MOSFET-Kanäle verwenden IRLML6344TRPBF mit
+//             100 Ω Gate-Reihe und 10 kΩ Pull-Down nach GND
+//             (Boot-Safe-Pegel während Pin-Konfiguration).
 //   11v05–Info-Seite: WLAN-Reset von T0 auf T3 verlegt – einheitliche
 //         Bedienung (Taste + = T3 = WLAN-Reset, Taste - = T4 = Werksreset).
 //         Info-Seite neu angeordnet: Z1 Versionsstring, Z2 Web-Log-Adresse,
@@ -136,7 +153,7 @@
 //          Stack-Größen als Kommentar dokumentiert
 
 // ── Firmware-Version ─────────────────────────────────────────
-#define FW_VERSION "11v05"                                                     // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
+#define FW_VERSION "12v00"                                                     // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
 
 // ── WiFi ─────────────────────────────────────────────────────
 // STA_SSID / STA_PSK werden nicht mehr direkt genutzt.
@@ -206,9 +223,16 @@ const uint8_t S2 = 33;                                                         /
 const uint8_t S3 = 0;                                                          // GPIO0  – Info-Seite ein/aus
 
 // ── Ausgangs-Pins ────────────────────────────────────────────
-const uint8_t E1 = 25;                                                         // GPIO25 – Kuckuck
-const uint8_t E2 = 26;                                                         // GPIO26 – Mühlrad / Motor
-const uint8_t E3 = 27;                                                         // GPIO27 – Licht
+const uint8_t E1 = 25;                                                         // GPIO25 – Kuckuck (digital, MOSFET)
+const uint8_t E2 = 26;                                                         // GPIO26 – Mühlrad / DC-Motor 3 V (PWM via LEDC, MOSFET + Freilaufdiode 1N4148)
+const uint8_t E3 = 27;                                                         // GPIO27 – LED-Streifen Licht (digital, MOSFET + 47 Ω Vorwiderstand High-Side)
+
+// ── Motor-PWM (E2 / GPIO26) ───────────────────────────────────
+// 12v00: DC-Motor 3 V an 5 V-Versorgung → PWM mit 60 % Duty ≙ ~3 V Mittelwert.
+// 20 kHz liegt über der Hörschwelle → kein Surren; 8-Bit-Auflösung reicht.
+#define MOTOR_PWM_FREQ 20000UL                                                 // 20 kHz Trägerfrequenz (über Hörschwelle)
+#define MOTOR_PWM_RES      8                                                   // 8-Bit Auflösung → Duty-Bereich 0..255
+#define MOTOR_PWM_DUTY   153                                                   // ~60 % Duty ≙ 3 V Mittelwert aus 5 V
 
 // ── Stack-Größen (Bytes) ──────────────────────────────────────
 // Angepasst auf Basis der Stack High-Water Marks aus stackMonTask.

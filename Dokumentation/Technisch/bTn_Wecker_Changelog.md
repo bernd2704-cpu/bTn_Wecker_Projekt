@@ -2,7 +2,7 @@
 
 Änderungshistorie
 
-Basis 4v1  →  11v05
+Basis 4v1  →  12v01
 
 ## Kategorien
 
@@ -164,4 +164,18 @@ Basis 4v1  →  11v05
 | 11v05 | Funktion | UI_INFO-Layout neu: Z1 Firmware-Kennung, Z2 Web-Log-Adresse (vorher Z5), Z3 MP3-/Reset-Zähler (vorher Z4), Z4 „Taste +  WiFi Reset", Z5 „ Taste –  Full Reset". Die früheren Hinweiszeilen „T0: RESET SSID PW" und „T4: WERKSRESET" (seit 11v02) entfallen zugunsten der symmetrischen +/–-Darstellung. |
 | 11v05 | Qualität | Wake-Discard-Kommentar (`inputTask` bei `displayBlanked`) auf T3/T4 als gefährliche Aktionen angepasst. State-Machine-Diagramm, `runWifiConfigServer()`-Kommentar und `setup()`-Block-Kommentar zur WiFi-Konfig-Anforderung auf T3 nachgezogen. |
 
-bTn Wecker  ·  Änderungshistorie  ·  Stand 11v05
+## Version 12v00
+
+| Version | Kategorie | Änderung |
+|---|---|---|
+| 12v00 | Funktion | Hardware-Erweiterung „Motor + LED-Streifen": E2 (GPIO26, Wasserrad-Motor) wird statt digital jetzt per PWM über LEDC angesteuert – 20 kHz / 8 Bit / 60 % Duty (`MOTOR_PWM_DUTY`=153) treibt den 3-V-Motor an 5 V mit Mittelwert ~3 V ohne hörbares Schaltgeräusch. Ansteuerung in `alarmTask` und am S2-Zugschalter auf `ledcWrite(E2, …)` umgestellt. |
+| 12v00 | Funktion | Neue zentrale Konstanten `MOTOR_PWM_FREQ` / `MOTOR_PWM_RES` / `MOTOR_PWM_DUTY` in SysConf (analog zu den `STACK_*`-Konstanten). |
+| 12v00 | Refactoring | `pinMode(E2, OUTPUT)` in `setup()` entfällt – `ledcAttach()` übernimmt die Pinkonfiguration. E3 (GPIO27, LED-Streifen) bleibt `digitalWrite(HIGH/LOW)` (ohmsche Last mit 47 Ω Vorwiderstand, kein PWM erforderlich). |
+
+## Version 12v01
+
+| Version | Kategorie | Änderung |
+|---|---|---|
+| 12v01 | Qualität | Stack-Größen neu vorgegeben (Bytes): touchTask 2880, wifiTask 2000, nvrTask 2304, inputTask 2240, displayTask 2176, alarmTask 2128, watchdogTask 1344, stackMonTask 2912. webLogTask (4096) unverändert. Werte direkt als `STACK_*`-Konstanten in SysConf gesetzt; `setup()` übernimmt sie ohne weitere Codeänderung. |
+
+bTn Wecker  ·  Änderungshistorie  ·  Stand 12v01

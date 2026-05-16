@@ -1,10 +1,16 @@
 #pragma once
-// SysConf_12v00.h – Konfigurationskonstanten für bTn Wecker
-// Firmware-Version : 12v00
-// Datei-Version    : 12v00
+// SysConf_12v01.h – Konfigurationskonstanten für bTn Wecker
+// Firmware-Version : 12v01
+// Datei-Version    : 12v01
 // Boardverwalter   : esp32 3.3.8 von Espressif Systems
 //
 // Änderungshistorie:
+//   12v01–Stack-Größen neu vorgegeben (Bytes): touchTask 2880,
+//         wifiTask 2000, nvrTask 2304, inputTask 2240,
+//         displayTask 2176, alarmTask 2128, watchdogTask 1344,
+//         stackMonTask 2912. webLogTask (4096) unverändert.
+//         Werte direkt als STACK_*-Konstanten gesetzt – setup()
+//         übernimmt sie ohne weitere Codeänderung.
 //   12v00–Hardware-Erweiterung "Motor + LED-Streifen" (siehe
 //         Hardware/hardware_notesmotor_led_driver.md):
 //         (1) E2 (GPIO26, Wasserrad-Motor) wird jetzt per PWM über
@@ -153,7 +159,7 @@
 //          Stack-Größen als Kommentar dokumentiert
 
 // ── Firmware-Version ─────────────────────────────────────────
-#define FW_VERSION "12v00"                                                     // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
+#define FW_VERSION "12v01"                                                     // Versionsnummer (als String in PGMInfo, Web-Log, WEB.h)
 
 // ── WiFi ─────────────────────────────────────────────────────
 // STA_SSID / STA_PSK werden nicht mehr direkt genutzt.
@@ -237,14 +243,14 @@ const uint8_t E3 = 27;                                                         /
 // ── Stack-Größen (Bytes) ──────────────────────────────────────
 // Angepasst auf Basis der Stack High-Water Marks aus stackMonTask.
 // setup() verwendet diese Konstanten direkt – Änderungen hier wirken sofort.
-#define STACK_TOUCH     3072                                                   // touchTask
-#define STACK_ALARM     2048                                                   // alarmTask
-#define STACK_WIFI      2560                                                   // wifiTask
-#define STACK_NVR       2560                                                   // nvrTask
-#define STACK_STACKMON  3072                                                   // stackMonTask
-#define STACK_WATCHDOG  1536                                                   // watchdogTask
-#define STACK_INPUT     2560                                                   // inputTask
-#define STACK_DISPLAY   2560                                                   // displayTask
+#define STACK_TOUCH     2880                                                   // touchTask
+#define STACK_ALARM     2128                                                   // alarmTask
+#define STACK_WIFI      2000                                                   // wifiTask
+#define STACK_NVR       2304                                                   // nvrTask
+#define STACK_STACKMON  2912                                                   // stackMonTask
+#define STACK_WATCHDOG  1344                                                   // watchdogTask
+#define STACK_INPUT     2240                                                   // inputTask
+#define STACK_DISPLAY   2176                                                   // displayTask
 #define STACK_WEBLOG    4096                                                   // webLogTask (HTTP-Server benötigt mehr Stack)
 
 // ── Web-Logger ────────────────────────────────────────────────

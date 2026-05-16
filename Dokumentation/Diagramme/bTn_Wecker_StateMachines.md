@@ -1,6 +1,6 @@
 # bTn Wecker – State Machines
 
-*Firmware 11v05 · Mermaid-Diagramme (aus `bTn_Wecker_StateMachines.pptx`)*
+*Firmware 12v01 · Mermaid-Diagramme (aus `bTn_Wecker_StateMachines.pptx`)*
 
 ---
 
@@ -126,4 +126,4 @@ stateDiagram-v2
 
 ---
 
-*bTn Wecker · State Machines · Firmware 11v05*
+*bTn Wecker · State Machines · Firmware 12v01*
